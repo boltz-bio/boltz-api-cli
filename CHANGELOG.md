@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.5 (2026-05-08)
+
+Full Changelog: [v0.15.4...v0.15.5](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.4...v0.15.5)
+
+### Chores
+
+* redact api-key headers in debug logs ([1372f16](https://github.com/boltz-bio/boltz-api-cli/commit/1372f160ed4e6372bfa249695b386cf9383db09f))
+
 ## 0.15.4 (2026-05-04)
 
 Full Changelog: [v0.15.3...v0.15.4](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.3...v0.15.4)
