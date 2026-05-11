@@ -97,6 +97,17 @@ func init() {
 				},
 			},
 			{
+				Name:     "predictions:adme",
+				Category: "API RESOURCE",
+				Suggest:  true,
+				Commands: []*cli.Command{
+					&predictionsAdmeRetrieve,
+					&predictionsAdmeList,
+					&predictionsAdmeDeleteData,
+					&predictionsAdmeStart,
+				},
+			},
+			{
 				Name:     "small-molecule:design",
 				Category: "API RESOURCE",
 				Suggest:  true,
