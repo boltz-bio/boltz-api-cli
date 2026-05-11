@@ -58,7 +58,7 @@ func TestProteinLibraryScreenEstimateCost(t *testing.T) {
 			"--api-key", "string",
 			"protein:library-screen", "estimate-cost",
 			"--protein", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], id: id}",
-			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
+			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7], non_binding_residues: [0, 1, 2]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -75,7 +75,7 @@ func TestProteinLibraryScreenEstimateCost(t *testing.T) {
 			"protein:library-screen", "estimate-cost",
 			"--protein.entities", "[{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}]",
 			"--protein.id", "id",
-			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
+			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7], non_binding_residues: [0, 1, 2]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -122,6 +122,10 @@ func TestProteinLibraryScreenEstimateCost(t *testing.T) {
 			"        - 5\n" +
 			"        - 6\n" +
 			"        - 7\n" +
+			"      non_binding_residues:\n" +
+			"        - 0\n" +
+			"        - 1\n" +
+			"        - 2\n" +
 			"  structure:\n" +
 			"    type: url\n" +
 			"    url: https://example.com\n" +
@@ -161,7 +165,7 @@ func TestProteinLibraryScreenStart(t *testing.T) {
 			"--api-key", "string",
 			"protein:library-screen", "start",
 			"--protein", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], id: id}",
-			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
+			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7], non_binding_residues: [0, 1, 2]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -178,7 +182,7 @@ func TestProteinLibraryScreenStart(t *testing.T) {
 			"protein:library-screen", "start",
 			"--protein.entities", "[{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}]",
 			"--protein.id", "id",
-			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
+			"--target", "{chain_selection: {A: {chain_type: polymer, crop_residues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], epitope_residues: [10, 11, 12], flexible_residues: [5, 6, 7], non_binding_residues: [0, 1, 2]}}, structure: {type: url, url: https://example.com}, type: structure_template}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -225,6 +229,10 @@ func TestProteinLibraryScreenStart(t *testing.T) {
 			"        - 5\n" +
 			"        - 6\n" +
 			"        - 7\n" +
+			"      non_binding_residues:\n" +
+			"        - 0\n" +
+			"        - 1\n" +
+			"        - 2\n" +
 			"  structure:\n" +
 			"    type: url\n" +
 			"    url: https://example.com\n" +
