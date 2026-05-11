@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.7 (2026-05-11)
+
+Full Changelog: [v0.15.6...v0.15.7](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.6...v0.15.7)
+
+### Bug Fixes
+
+* **download-results:** append pipeline manifest entries ([4f1284d](https://github.com/boltz-bio/boltz-api-cli/commit/4f1284d3b4881fde4529449053d596a0eaa1b117))
+* **download-results:** surface manifest close errors ([ac5172e](https://github.com/boltz-bio/boltz-api-cli/commit/ac5172ed4757b79eabd3a6a2f7d74b4810cd4330))
+
 ## 0.15.6 (2026-05-09)
 
 Full Changelog: [v0.15.5...v0.15.6](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.5...v0.15.6)
