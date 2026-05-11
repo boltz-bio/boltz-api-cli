@@ -42,7 +42,6 @@ const (
 	downloadProgressFormatText        = "text"
 	downloadModeEverything            = "everything"
 	downloadModeMetadataOnly          = "metadata_only"
-	downloadModeCIFAndMetadata        = "cif_and_metadata"
 )
 
 var (
@@ -105,7 +104,7 @@ var downloadResultsCommand = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:  "download-mode",
-			Usage: "Pipeline artifact download mode (`everything`, `metadata_only`, or `cif_and_metadata`).",
+			Usage: "Pipeline artifact download mode (`everything` or `metadata_only`).",
 			Value: downloadModeEverything,
 		},
 		&cli.BoolFlag{
@@ -609,7 +608,7 @@ func normalizeDownloadMode(value string) string {
 
 func isSupportedDownloadMode(value string) bool {
 	switch value {
-	case downloadModeEverything, downloadModeMetadataOnly, downloadModeCIFAndMetadata:
+	case downloadModeEverything, downloadModeMetadataOnly:
 		return true
 	default:
 		return false
@@ -617,7 +616,7 @@ func isSupportedDownloadMode(value string) bool {
 }
 
 func supportedDownloadModes() []string {
-	return []string{downloadModeEverything, downloadModeMetadataOnly, downloadModeCIFAndMetadata}
+	return []string{downloadModeEverything, downloadModeMetadataOnly}
 }
 
 func resolveCreateDownloadRunDir(rootDir string) (string, error) {
@@ -1191,7 +1190,7 @@ func (e *downloadResultsEngine) materializePipelineResult(ctx context.Context, r
 	switch metadata.DownloadMode {
 	case downloadModeMetadataOnly:
 		return manifest.appendMetadata(result.Metadata, result.ID)
-	case downloadModeEverything, downloadModeCIFAndMetadata:
+	case downloadModeEverything:
 		resultDir := filepath.Join(runDir, "results", result.ID)
 		archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
 		if err != nil {

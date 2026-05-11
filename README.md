@@ -251,8 +251,7 @@ It also writes a sanitized `run.json` for the remote run. Pipeline downloads alw
 `results/index.jsonl` manifest with one result per line. By default, pipeline downloads use
 `--download-mode everything`, which writes `results/<result-id>/metadata.json`, downloads each archive,
 extracts it, and adds local artifact paths to the manifest. Use `--download-mode metadata_only` to
-write only the manifest metadata. `--download-mode cif_and_metadata` is accepted as an alias for
-`everything`.
+write only the manifest metadata.
 
 Structure prediction run IDs now use the `sab_pred` prefix. Historical `pred_` IDs are still supported.
 
@@ -264,7 +263,6 @@ boltz-api download-results --name example-run
 boltz-api download-results --id pred_123 --name legacy-run
 boltz-api download-results --id prot_des_123 --name batch-run
 boltz-api download-results --id prot_des_123 --name batch-run-light --download-mode metadata_only
-boltz-api download-results --id prot_des_123 --name batch-run-full --download-mode cif_and_metadata
 boltz-api download-results --id sab_pred_123 --name human-run --progress-format text --verbose
 ```
 
