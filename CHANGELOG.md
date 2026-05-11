@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.0 (2026-05-11)
+
+Full Changelog: [v0.15.7...v0.16.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.7...v0.16.0)
+
+### Features
+
+* [codex] Add ADME scoring for small molecule pipelines ([deaf796](https://github.com/boltz-bio/boltz-api-cli/commit/deaf796e5eed4f0ec39930999d7c7aeb024cc8d2))
+* **compute-api:** support non-binding target residues ([75f1166](https://github.com/boltz-bio/boltz-api-cli/commit/75f1166c750db8519a908e7781c13dd03e7817ed))
+* **download-results:** add pipeline download modes ([53639f2](https://github.com/boltz-bio/boltz-api-cli/commit/53639f22c00e53e89e720a73abc017b64343389e))
+
+
+### Bug Fixes
+
+* **download-results:** make default run names deterministic ([161ba33](https://github.com/boltz-bio/boltz-api-cli/commit/161ba339e5433b0b306708624944c937cca3791c))
+* **download-results:** remove cif download mode ([3513eda](https://github.com/boltz-bio/boltz-api-cli/commit/3513eda88a4c55a4f8e56fa329e14fbc130e92cd))
+
 ## 0.15.7 (2026-05-11)
 
 Full Changelog: [v0.15.6...v0.15.7](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.6...v0.15.7)
