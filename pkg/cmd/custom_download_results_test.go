@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -594,6 +595,41 @@ func TestPipelineDownloadResultsResumesPendingPageAfterPartialFailure(t *testing
 	assert.Nil(t, metadata.Pending)
 }
 
+func TestPipelineResultManifestAppenderSkipsPreviouslyIndexedResults(t *testing.T) {
+	cwd := t.TempDir()
+	runDir := filepath.Join(cwd, "runs", "append")
+	resultDir := filepath.Join(runDir, "results", "res_1")
+	require.NoError(t, os.MkdirAll(filepath.Join(resultDir, "files"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(resultDir, "archive.tar.gz"), []byte("archive"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(resultDir, "files", "metrics.json"), []byte("{}"), 0o644))
+	require.NoError(t, savePipelineResultMetadata(resultDir, downloadPipelineResultInfo{
+		ID:       "res_1",
+		Metadata: map[string]any{"id": "res_1", "score": 0.9},
+	}))
+
+	manifest := newPipelineResultManifestAppender(runDir)
+	require.NoError(t, manifest.appendResult(resultDir, "res_1"))
+	require.NoError(t, manifest.appendResult(resultDir, "res_1"))
+
+	entries := readDownloadResultsTestJSONL(t, filepath.Join(runDir, "results", "index.jsonl"))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "res_1", entries[0]["id"])
+	paths, ok := entries[0]["paths"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "results/res_1/archive.tar.gz", paths["archive"])
+	assert.Equal(t, "results/res_1/files/metrics.json", paths["metrics"])
+}
+
+func TestAppendDownloadJSONLReturnsCloseErrors(t *testing.T) {
+	closeErr := errors.New("close failed")
+	writer := &closeErrorWriter{err: closeErr}
+
+	err := appendDownloadJSONL(writer, map[string]any{"id": "res_1"})
+
+	require.ErrorIs(t, err, closeErr)
+	assert.JSONEq(t, `{"id":"res_1"}`, strings.TrimSpace(writer.String()))
+}
+
 func TestPipelineFailedStillDownloadsDiscoveredResults(t *testing.T) {
 	setDownloadResultsTestEnv(t)
 	cwd := t.TempDir()
@@ -838,6 +874,15 @@ func runDownloadResultsCLI(t *testing.T, args ...string) (string, string, error)
 	root := newDownloadResultsTestRoot(&stdout, &stderr)
 	err := root.Run(context.Background(), append([]string{"boltz-api"}, args...))
 	return stdout.String(), stderr.String(), err
+}
+
+type closeErrorWriter struct {
+	bytes.Buffer
+	err error
+}
+
+func (w *closeErrorWriter) Close() error {
+	return w.err
 }
 
 func newDownloadResultsTestRoot(stdout io.Writer, stderr io.Writer) *cli.Command {

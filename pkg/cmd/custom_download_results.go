@@ -982,6 +982,7 @@ func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir stri
 		return fmt.Errorf("Run %s has no confirmed remote run ID", runDir)
 	}
 	e.sink.info("waiting", fmt.Sprintf("Waiting for %s in %s", strings.ReplaceAll(string(metadata.RunType), "_", " "), runDir), runDir, metadata, nil)
+	manifest := newPipelineResultManifestAppender(runDir)
 
 	for {
 		response, err := e.getPipeline(ctx, metadata.RunType, runID, metadata.Remote.WorkspaceID)
@@ -1003,7 +1004,7 @@ func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir stri
 		madeProgress := false
 		for {
 			if metadata.Pending != nil && metadata.Pending.Kind == downloadPendingKindResultPage {
-				if err := e.drainPendingPipelinePage(ctx, runDir, metadata); err != nil {
+				if err := e.drainPendingPipelinePage(ctx, runDir, metadata, manifest); err != nil {
 					return err
 				}
 				madeProgress = true
@@ -1079,7 +1080,7 @@ func (e *downloadResultsEngine) discoverNextPipelinePage(ctx context.Context, ru
 	return true, nil
 }
 
-func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata) error {
+func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender) error {
 	if metadata.Pending == nil || metadata.Pending.Kind != downloadPendingKindResultPage {
 		return errors.New("Pipeline metadata does not contain a pending page")
 	}
@@ -1117,7 +1118,7 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 				return err
 			}
 		}
-		if err := rebuildPipelineResultManifest(runDir); err != nil {
+		if err := manifest.appendResult(resultDir, result.ID); err != nil {
 			return err
 		}
 
@@ -1417,6 +1418,102 @@ func savePipelineResultMetadata(resultDir string, result downloadPipelineResultI
 	return writeDownloadJSONFile(filepath.Join(resultDir, downloadResultsResultMetadataName), metadata)
 }
 
+type pipelineResultManifestAppender struct {
+	runDir   string
+	loaded   bool
+	knownIDs map[string]struct{}
+}
+
+func newPipelineResultManifestAppender(runDir string) *pipelineResultManifestAppender {
+	return &pipelineResultManifestAppender{runDir: runDir}
+}
+
+func (m *pipelineResultManifestAppender) appendResult(resultDir string, fallbackID string) error {
+	if err := m.load(); err != nil {
+		return err
+	}
+	if fallbackID != "" {
+		if _, ok := m.knownIDs[fallbackID]; ok {
+			return nil
+		}
+	}
+
+	entry, err := pipelineResultManifestEntry(m.runDir, resultDir, fallbackID)
+	if err != nil {
+		return err
+	}
+	id := fmt.Sprint(entry["id"])
+	if _, ok := m.knownIDs[id]; ok {
+		return nil
+	}
+	if err := appendDownloadJSONLFile(filepath.Join(m.runDir, "results", downloadResultsResultIndexName), entry); err != nil {
+		return err
+	}
+	m.knownIDs[id] = struct{}{}
+	return nil
+}
+
+func (m *pipelineResultManifestAppender) load() error {
+	if m.loaded {
+		return nil
+	}
+	ids, err := readPipelineResultManifestIDs(m.runDir)
+	if err != nil {
+		if rebuildErr := rebuildPipelineResultManifest(m.runDir); rebuildErr != nil {
+			return fmt.Errorf("read result manifest IDs: %w; rebuild failed: %w", err, rebuildErr)
+		}
+		ids, err = readPipelineResultManifestIDs(m.runDir)
+		if err != nil {
+			return err
+		}
+	}
+	m.knownIDs = ids
+	m.loaded = true
+	return nil
+}
+
+func readPipelineResultManifestIDs(runDir string) (map[string]struct{}, error) {
+	path := filepath.Join(runDir, "results", downloadResultsResultIndexName)
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]struct{}{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	ids := map[string]struct{}{}
+	decoder := json.NewDecoder(file)
+	for {
+		var entry map[string]any
+		if err := decoder.Decode(&entry); errors.Is(err, io.EOF) {
+			return ids, nil
+		} else if err != nil {
+			return nil, err
+		}
+		if id, ok := entry["id"]; ok {
+			ids[fmt.Sprint(id)] = struct{}{}
+		}
+	}
+}
+
+func pipelineResultManifestEntry(runDir string, resultDir string, fallbackID string) (map[string]any, error) {
+	metadataPath := filepath.Join(resultDir, downloadResultsResultMetadataName)
+	metadata, err := readDownloadJSONFile(metadataPath)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := metadata["id"]; !ok {
+		metadata["id"] = fallbackID
+	}
+	paths := pipelineResultLocalPaths(runDir, resultDir)
+	if len(paths) > 0 {
+		metadata["paths"] = paths
+	}
+	return metadata, nil
+}
+
 func rebuildPipelineResultManifest(runDir string) error {
 	resultsDir := filepath.Join(runDir, "results")
 	entries, err := os.ReadDir(resultsDir)
@@ -1433,20 +1530,12 @@ func rebuildPipelineResultManifest(runDir string) error {
 			continue
 		}
 		resultDir := filepath.Join(resultsDir, entry.Name())
-		metadataPath := filepath.Join(resultDir, downloadResultsResultMetadataName)
-		metadata, err := readDownloadJSONFile(metadataPath)
+		metadata, err := pipelineResultManifestEntry(runDir, resultDir, entry.Name())
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return err
-		}
-		if _, ok := metadata["id"]; !ok {
-			metadata["id"] = entry.Name()
-		}
-		paths := pipelineResultLocalPaths(runDir, resultDir)
-		if len(paths) > 0 {
-			metadata["paths"] = paths
 		}
 		manifest = append(manifest, metadata)
 	}
@@ -1606,6 +1695,29 @@ func writeDownloadJSONLFile(path string, values []map[string]any) error {
 		}
 	}
 	return writeDownloadFileAtomically(path, []byte(builder.String()))
+}
+
+func appendDownloadJSONLFile(path string, value map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	return appendDownloadJSONL(file, value)
+}
+
+func appendDownloadJSONL(writer io.WriteCloser, value map[string]any) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		if closeErr := writer.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+	return writer.Close()
 }
 
 func writeDownloadFileAtomically(path string, payload []byte) error {
