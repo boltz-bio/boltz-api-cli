@@ -64,7 +64,7 @@ func TestDownloadStatusReportsStructuredMetadataSnapshot(t *testing.T) {
 	runDir := filepath.Join(cwd, downloadResultsDefaultRootDir, "status-run")
 	require.NoError(t, os.MkdirAll(runDir, 0o755))
 
-	metadata := newDownloadRunMetadata("status-run", downloadRunTypeProteinDesign, "prot_des_123", nil)
+	metadata := newDownloadRunMetadata("status-run", downloadRunTypeProteinDesign, "prot_des_123", nil, downloadModeEverything)
 	status := "running"
 	startedAt := "2026-04-22T10:00:00Z"
 	latestResultID := "res_7"
@@ -91,6 +91,7 @@ func TestDownloadStatusReportsStructuredMetadataSnapshot(t *testing.T) {
 	assert.Equal(t, runDir, response["run_dir"])
 	assert.Equal(t, "status-run", response["name"])
 	assert.Equal(t, string(downloadRunTypeProteinDesign), response["run_type"])
+	assert.Equal(t, downloadModeEverything, response["download_mode"])
 	assert.Equal(t, "prot_des_123", response["run_id"])
 	assert.Equal(t, "running", response["status"])
 	assert.Equal(t, "materializing_results", response["phase"])

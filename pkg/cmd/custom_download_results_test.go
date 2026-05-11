@@ -74,6 +74,16 @@ func TestDownloadResultsCommandValidation(t *testing.T) {
 			args:    []string{"download-results", "--id", "pred_123", "--progress-format", "csv"},
 			wantErr: "--progress-format must be one of",
 		},
+		{
+			name:    "reject invalid download mode",
+			args:    []string{"download-results", "--id", "prot_des_123", "--download-mode", "archive"},
+			wantErr: "--download-mode must be one of",
+		},
+		{
+			name:    "reject non-default prediction download mode",
+			args:    []string{"download-results", "--id", "pred_123", "--download-mode", "metadata_only"},
+			wantErr: "--download-mode only supports pipeline run IDs",
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -151,7 +161,7 @@ func TestPredictionDownloadResultsDefaultRunDirUsesDeterministicReadableName(t *
 func TestDownloadResultsMetadataRoundTripPreservesExtraFields(t *testing.T) {
 	runDir := t.TempDir()
 
-	metadata := newDownloadRunMetadata("example", downloadRunTypePrediction, "pred_123", nil)
+	metadata := newDownloadRunMetadata("example", downloadRunTypePrediction, "pred_123", nil, downloadModeEverything)
 	metadata.ExtraFields = map[string]json.RawMessage{
 		"unexpected": json.RawMessage(`true`),
 	}
@@ -593,6 +603,61 @@ func TestPipelineDownloadResultsHappyPathAllRunTypes(t *testing.T) {
 	}
 }
 
+func TestPipelineDownloadResultsMetadataOnlySkipsArtifacts(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	runID := "prot_des_123"
+	var artifactRequests atomic.Int32
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/v1/protein/design/" + runID:
+			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_2", ""))
+		case "/compute/v1/protein/design/" + runID + "/results":
+			if r.URL.Query().Get("after_id") == "res_2" {
+				writeJSON(t, w, emptyPipelinePageJSON())
+				return
+			}
+			writeJSON(t, w, pipelineResultsPageJSON(server.URL, runID, "res_1", "res_2"))
+		case "/files/" + runID + "/res_1.tar.gz", "/files/" + runID + "/res_2.tar.gz", "/files/" + runID + "/res_1.cif", "/files/" + runID + "/res_2.cif":
+			artifactRequests.Add(1)
+			_, _ = w.Write([]byte("unexpected"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	stdout, stderr, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--id", runID,
+		"--name", "metadata-only",
+		"--download-mode", "metadata_only",
+	)
+	require.NoError(t, err)
+
+	runDir := filepath.Join(cwd, downloadResultsDefaultRootDir, "metadata-only")
+	assert.Equal(t, runDir+"\n", stdout)
+	assert.NotEmpty(t, stderr)
+	assert.EqualValues(t, 0, artifactRequests.Load())
+	assert.NoDirExists(t, filepath.Join(runDir, "results", "res_1"))
+
+	metadata := mustLoadDownloadMetadata(t, runDir)
+	assert.Equal(t, downloadModeMetadataOnly, metadata.DownloadMode)
+
+	manifest := readDownloadResultsTestJSONL(t, filepath.Join(runDir, "results", "index.jsonl"))
+	require.Len(t, manifest, 2)
+	assert.Equal(t, "res_1", manifest[0]["id"])
+	assert.NotContains(t, manifest[0], "paths")
+	assertPipelineResultMetadata(t, runID, manifest[0])
+}
+
 func TestPipelineDownloadResultsResumesPendingPageAfterPartialFailure(t *testing.T) {
 	setDownloadResultsTestEnv(t)
 	cwd := t.TempDir()
@@ -789,7 +854,7 @@ func TestPipelineMissingCheckpointedResultFails(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runDir, 0o755))
 
 	runID := "prot_des_123"
-	metadata := newDownloadRunMetadata("resume", downloadRunTypeProteinDesign, runID, nil)
+	metadata := newDownloadRunMetadata("resume", downloadRunTypeProteinDesign, runID, nil, downloadModeEverything)
 	lastID := "res_1"
 	metadata.Pending = &downloadPendingState{
 		Kind:       downloadPendingKindResultPage,
@@ -1040,6 +1105,10 @@ func pipelineResultsPageJSON(baseURL string, runID string, resultIDs ...string) 
 		result["artifacts"] = map[string]any{
 			"archive": map[string]any{
 				"url":            fmt.Sprintf("%s/files/%s/%s.tar.gz", baseURL, runID, resultID),
+				"url_expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			},
+			"structure": map[string]any{
+				"url":            fmt.Sprintf("%s/files/%s/%s.cif", baseURL, runID, resultID),
 				"url_expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 			},
 		}

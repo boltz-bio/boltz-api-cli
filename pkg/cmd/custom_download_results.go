@@ -40,6 +40,8 @@ const (
 	downloadResultsSummaryIntervalSec = 30 * time.Second
 	downloadProgressFormatJSONL       = "jsonl"
 	downloadProgressFormatText        = "text"
+	downloadModeEverything            = "everything"
+	downloadModeMetadataOnly          = "metadata_only"
 )
 
 var (
@@ -59,7 +61,7 @@ var (
 	downloadResultsAdjectives            = []string{"amber", "brisk", "calm", "clear", "keen", "lively", "lucid", "quiet", "rapid", "steady"}
 	downloadResultsNouns                 = []string{"atom", "binder", "cluster", "enzyme", "helix", "ligand", "motif", "pocket", "sample", "target"}
 	downloadResultsVerbs                 = []string{"aligns", "builds", "checks", "drifts", "folds", "guides", "mixes", "screens", "shifts", "tracks"}
-	downloadResultsKnownMetadataFields   = map[string]struct{}{"schema_version": {}, "name": {}, "run_type": {}, "request_fingerprint": {}, "idempotency_key": {}, "remote": {}, "pending": {}, "cursor_after_id": {}}
+	downloadResultsKnownMetadataFields   = map[string]struct{}{"schema_version": {}, "name": {}, "run_type": {}, "download_mode": {}, "request_fingerprint": {}, "idempotency_key": {}, "remote": {}, "pending": {}, "cursor_after_id": {}}
 	downloadResultsSupportedArchiveTypes = []string{".tar.gz", ".tgz", ".tar", ".zip"}
 )
 
@@ -100,6 +102,11 @@ var downloadResultsCommand = &cli.Command{
 			Usage: "Format for progress logs written to stderr (`jsonl` or `text`). `jsonl` is the default agent-friendly format.",
 			Value: downloadProgressFormatJSONL,
 		},
+		&cli.StringFlag{
+			Name:  "download-mode",
+			Usage: "Pipeline artifact download mode (`everything` or `metadata_only`).",
+			Value: downloadModeEverything,
+		},
 		&cli.BoolFlag{
 			Name:    "verbose",
 			Aliases: []string{"v"},
@@ -129,6 +136,8 @@ type downloadResultsSpec struct {
 	WorkspaceID         *string
 	PollIntervalSeconds float64
 	ProgressFormat      string
+	DownloadMode        string
+	DownloadModeSet     bool
 	Verbose             bool
 }
 
@@ -136,6 +145,7 @@ type downloadRunMetadata struct {
 	SchemaVersion      int                        `json:"schema_version"`
 	Name               string                     `json:"name"`
 	RunType            downloadRunType            `json:"run_type"`
+	DownloadMode       string                     `json:"download_mode"`
 	RequestFingerprint string                     `json:"request_fingerprint"`
 	IdempotencyKey     string                     `json:"idempotency_key"`
 	Remote             downloadRemoteState        `json:"remote"`
@@ -166,6 +176,7 @@ type downloadStatusResponse struct {
 	RunDir            string          `json:"run_dir"`
 	Name              string          `json:"name"`
 	RunType           downloadRunType `json:"run_type"`
+	DownloadMode      string          `json:"download_mode"`
 	RunID             *string         `json:"run_id,omitempty"`
 	WorkspaceID       *string         `json:"workspace_id,omitempty"`
 	Status            *string         `json:"status,omitempty"`
@@ -406,11 +417,15 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 	workspaceID := trimOptionalString(cmd.String("workspace-id"))
 	pollIntervalSeconds := cmd.Float64("poll-interval-seconds")
 	progressFormat := normalizeDownloadProgressFormat(cmd.String("progress-format"))
+	downloadMode := normalizeDownloadMode(cmd.String("download-mode"))
 	if pollIntervalSeconds < 0 {
 		return downloadResultsSpec{}, errors.New("--poll-interval-seconds must be non-negative")
 	}
 	if !isSupportedDownloadProgressFormat(progressFormat) {
 		return downloadResultsSpec{}, fmt.Errorf("--progress-format must be one of: %s", strings.Join([]string{downloadProgressFormatText, downloadProgressFormatJSONL}, ", "))
+	}
+	if !isSupportedDownloadMode(downloadMode) {
+		return downloadResultsSpec{}, fmt.Errorf("--download-mode must be one of: %s", strings.Join(supportedDownloadModes(), ", "))
 	}
 	if name != nil && runDir != nil {
 		return downloadResultsSpec{}, errors.New("--name and --run-dir are mutually exclusive")
@@ -427,8 +442,12 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 		return downloadResultsSpec{}, errors.New("--run-dir must not be empty")
 	}
 	if id != nil {
-		if _, err := inferDownloadRunType(*id); err != nil {
+		runType, err := inferDownloadRunType(*id)
+		if err != nil {
 			return downloadResultsSpec{}, err
+		}
+		if runType == downloadRunTypePrediction && downloadMode != downloadModeEverything {
+			return downloadResultsSpec{}, errors.New("--download-mode only supports pipeline run IDs")
 		}
 	}
 
@@ -440,6 +459,8 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 		WorkspaceID:         workspaceID,
 		PollIntervalSeconds: pollIntervalSeconds,
 		ProgressFormat:      progressFormat,
+		DownloadMode:        downloadMode,
+		DownloadModeSet:     cmd.IsSet("download-mode"),
 		Verbose:             cmd.Bool("verbose"),
 	}, nil
 }
@@ -497,7 +518,7 @@ func prepareDownloadRun(spec downloadResultsSpec) (string, downloadRunMetadata, 
 		return "", downloadRunMetadata{}, err
 	}
 
-	metadata := newDownloadRunMetadata(filepath.Base(runDir), runType, *spec.ID, spec.WorkspaceID)
+	metadata := newDownloadRunMetadata(filepath.Base(runDir), runType, *spec.ID, spec.WorkspaceID, spec.DownloadMode)
 	if err := saveDownloadMetadata(runDir, metadata); err != nil {
 		return "", downloadRunMetadata{}, err
 	}
@@ -573,6 +594,31 @@ func isSupportedDownloadProgressFormat(value string) bool {
 	return value == downloadProgressFormatText || value == downloadProgressFormatJSONL
 }
 
+func normalizeDownloadMode(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	if normalized == "" {
+		return downloadModeEverything
+	}
+	if normalized == "all" {
+		return downloadModeEverything
+	}
+	return normalized
+}
+
+func isSupportedDownloadMode(value string) bool {
+	switch value {
+	case downloadModeEverything, downloadModeMetadataOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+func supportedDownloadModes() []string {
+	return []string{downloadModeEverything, downloadModeMetadataOnly}
+}
+
 func validateDownloadRunName(name string) (string, error) {
 	stripped := strings.TrimSpace(name)
 	if stripped == "" {
@@ -592,6 +638,7 @@ func buildDownloadStatusResponse(runDir string, metadata downloadRunMetadata) do
 		RunDir:         runDir,
 		Name:           metadata.Name,
 		RunType:        metadata.RunType,
+		DownloadMode:   metadata.DownloadMode,
 		RunID:          cloneString(metadata.Remote.RunID),
 		WorkspaceID:    cloneString(metadata.Remote.WorkspaceID),
 		Status:         cloneString(metadata.Remote.Status),
@@ -704,6 +751,13 @@ func ensureDownloadDirectoryReady(runDir string) error {
 }
 
 func reconcileMetadataWithSpec(runDir string, metadata *downloadRunMetadata, spec downloadResultsSpec) error {
+	metadata.DownloadMode = normalizeDownloadMode(metadata.DownloadMode)
+	if !isSupportedDownloadMode(metadata.DownloadMode) {
+		return fmt.Errorf("Run directory %s has unsupported download mode %q", runDir, metadata.DownloadMode)
+	}
+	if spec.DownloadModeSet && metadata.DownloadMode != spec.DownloadMode {
+		return fmt.Errorf("Run directory %s uses download mode %s, not %s", runDir, metadata.DownloadMode, spec.DownloadMode)
+	}
 	if spec.ID != nil {
 		if metadata.Remote.RunID == nil || *metadata.Remote.RunID != *spec.ID {
 			return fmt.Errorf("Run directory %s belongs to remote run %s, not %s", runDir, derefString(metadata.Remote.RunID), *spec.ID)
@@ -714,6 +768,9 @@ func reconcileMetadataWithSpec(runDir string, metadata *downloadRunMetadata, spe
 		}
 		if metadata.RunType != inferredType {
 			return fmt.Errorf("Run directory %s belongs to %s, not %s", runDir, metadata.RunType, inferredType)
+		}
+		if metadata.RunType == downloadRunTypePrediction && metadata.DownloadMode != downloadModeEverything {
+			return fmt.Errorf("Run directory %s belongs to a prediction and cannot use download mode %s", runDir, metadata.DownloadMode)
 		}
 	}
 	if spec.WorkspaceID != nil {
@@ -732,11 +789,16 @@ func reconcileMetadataWithSpec(runDir string, metadata *downloadRunMetadata, spe
 	return nil
 }
 
-func newDownloadRunMetadata(name string, runType downloadRunType, runID string, workspaceID *string) downloadRunMetadata {
+func newDownloadRunMetadata(name string, runType downloadRunType, runID string, workspaceID *string, downloadMode string) downloadRunMetadata {
+	downloadMode = normalizeDownloadMode(downloadMode)
+	if !isSupportedDownloadMode(downloadMode) {
+		downloadMode = downloadModeEverything
+	}
 	return downloadRunMetadata{
 		SchemaVersion:      downloadResultsSchemaVersion,
 		Name:               name,
 		RunType:            runType,
+		DownloadMode:       downloadMode,
 		RequestFingerprint: fingerprintDownloadRun(runType, runID, workspaceID),
 		IdempotencyKey:     "download_" + randomHex(16),
 		Remote: downloadRemoteState{
@@ -826,6 +888,10 @@ func loadDownloadMetadata(runDir string) (downloadRunMetadata, error) {
 	}
 	if !isSupportedDownloadRunType(metadata.RunType) {
 		return downloadRunMetadata{}, fmt.Errorf("Invalid run metadata.run_type: %q", metadata.RunType)
+	}
+	metadata.DownloadMode = normalizeDownloadMode(metadata.DownloadMode)
+	if !isSupportedDownloadMode(metadata.DownloadMode) {
+		return downloadRunMetadata{}, fmt.Errorf("Invalid run metadata.download_mode: %q", metadata.DownloadMode)
 	}
 	if metadata.Pending != nil {
 		if metadata.Pending.Kind != downloadPendingKindPredictionArchive && metadata.Pending.Kind != downloadPendingKindResultPage {
@@ -1050,7 +1116,7 @@ func (e *downloadResultsEngine) discoverNextPipelinePage(ctx context.Context, ru
 		PageLastID: pageLastID,
 		ResultIDs:  resultIDs,
 	}
-	e.sink.info("page_discovered", fmt.Sprintf("Queued %d result archives for download", len(resultIDs)), runDir, metadata, nil)
+	e.sink.info("page_discovered", fmt.Sprintf("Queued %d results for download", len(resultIDs)), runDir, metadata, nil)
 	return true, nil
 }
 
@@ -1079,6 +1145,26 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 			return fmt.Errorf("Unable to resume result page; result %s is no longer present", resultID)
 		}
 
+		if err := e.materializePipelineResult(ctx, runDir, metadata, manifest, result); err != nil {
+			return err
+		}
+
+		metadata.Pending.ResultIDs = metadata.Pending.ResultIDs[1:]
+		if err := saveDownloadMetadata(runDir, *metadata); err != nil {
+			return err
+		}
+	}
+
+	metadata.CursorAfterID = cloneString(metadata.Pending.PageLastID)
+	metadata.Pending = nil
+	return saveDownloadMetadata(runDir, *metadata)
+}
+
+func (e *downloadResultsEngine) materializePipelineResult(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender, result downloadPipelineResultInfo) error {
+	switch metadata.DownloadMode {
+	case downloadModeMetadataOnly:
+		return manifest.appendMetadata(result.Metadata, result.ID)
+	case downloadModeEverything:
 		resultDir := filepath.Join(runDir, "results", result.ID)
 		archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
 		if err != nil {
@@ -1092,19 +1178,10 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 				return err
 			}
 		}
-		if err := manifest.appendResult(resultDir, result.ID); err != nil {
-			return err
-		}
-
-		metadata.Pending.ResultIDs = metadata.Pending.ResultIDs[1:]
-		if err := saveDownloadMetadata(runDir, *metadata); err != nil {
-			return err
-		}
+		return manifest.appendResult(resultDir, result.ID)
+	default:
+		return fmt.Errorf("Unsupported download mode %q", metadata.DownloadMode)
 	}
-
-	metadata.CursorAfterID = cloneString(metadata.Pending.PageLastID)
-	metadata.Pending = nil
-	return saveDownloadMetadata(runDir, *metadata)
 }
 
 func (e *downloadResultsEngine) materializeArchive(ctx context.Context, runDir string, metadata *downloadRunMetadata, archiveURL string, archivePath string, extractedDir string, details map[string]any) error {
@@ -1131,8 +1208,15 @@ func (e *downloadResultsEngine) materializeArchive(ctx context.Context, runDir s
 }
 
 func (e *downloadResultsEngine) downloadArchive(ctx context.Context, archiveURL string, destination string) error {
+	return e.downloadArtifact(ctx, archiveURL, destination)
+}
+
+func (e *downloadResultsEngine) downloadArtifact(ctx context.Context, artifactURL string, destination string) error {
 	partPath := destination + ".part"
 	if err := os.Remove(partPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		return err
 	}
 
@@ -1145,7 +1229,7 @@ func (e *downloadResultsEngine) downloadArchive(ctx context.Context, archiveURL 
 	var response *http.Response
 	err = e.client.Get(
 		ctx,
-		archiveURL,
+		artifactURL,
 		nil,
 		nil,
 		option.WithResponseInto(&response),
@@ -1159,7 +1243,7 @@ func (e *downloadResultsEngine) downloadArchive(ctx context.Context, archiveURL 
 		return err
 	}
 	if response == nil {
-		return errors.New("archive download returned no response")
+		return errors.New("artifact download returned no response")
 	}
 	defer response.Body.Close()
 
@@ -1416,6 +1500,26 @@ func (m *pipelineResultManifestAppender) appendResult(resultDir string, fallback
 	if err != nil {
 		return err
 	}
+	return m.appendEntry(entry)
+}
+
+func (m *pipelineResultManifestAppender) appendMetadata(metadata map[string]any, fallbackID string) error {
+	if err := m.load(); err != nil {
+		return err
+	}
+	if fallbackID != "" {
+		if _, ok := m.knownIDs[fallbackID]; ok {
+			return nil
+		}
+	}
+	entry := cloneDownloadJSONMap(metadata)
+	if _, ok := entry["id"]; !ok {
+		entry["id"] = fallbackID
+	}
+	return m.appendEntry(entry)
+}
+
+func (m *pipelineResultManifestAppender) appendEntry(entry map[string]any) error {
 	id := fmt.Sprint(entry["id"])
 	if _, ok := m.knownIDs[id]; ok {
 		return nil

@@ -249,8 +249,11 @@ Refresh tokens are stored in the OS keychain when available, with a fallback to:
 `download-results` creates or resumes a local run directory under `boltz-experiments/` and checkpoints progress in `.boltz-run.json`.
 When `--name` and `--run-dir` are omitted, the run ID maps to a deterministic readable name such as
 `boltz-experiments/lucid-atom-checks-2f7148`, so repeated downloads for the same remote run resume in the same directory.
-It also writes a sanitized `run.json` for the remote run. Pipeline downloads include `results/<result-id>/metadata.json`
-for each result and a `results/index.jsonl` manifest with one result per line plus local artifact paths.
+It also writes a sanitized `run.json` for the remote run. Pipeline downloads always include a
+`results/index.jsonl` manifest with one result per line. By default, pipeline downloads use
+`--download-mode everything`, which writes `results/<result-id>/metadata.json`, downloads each archive,
+extracts it, and adds local artifact paths to the manifest. Use `--download-mode metadata_only` to
+write only the manifest metadata.
 
 Structure prediction run IDs now use the `sab_pred` prefix. Historical `pred_` IDs are still supported.
 
@@ -262,6 +265,7 @@ boltz-api download-results --id sab_pred_123 --name example-run
 boltz-api download-results --name example-run
 boltz-api download-results --id pred_123 --name legacy-run
 boltz-api download-results --id prot_des_123 --name batch-run
+boltz-api download-results --id prot_des_123 --name batch-run-light --download-mode metadata_only
 boltz-api download-results --id sab_pred_123 --name human-run --progress-format text --verbose
 ```
 
