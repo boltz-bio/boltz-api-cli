@@ -547,7 +547,7 @@ func resolveDownloadRunDir(spec downloadResultsSpec) (string, error) {
 		return "", errors.New("Either local metadata must already exist or --id must be provided")
 	}
 
-	return resolveCreateDownloadRunDir(rootDir)
+	return filepath.Join(rootDir, deterministicDownloadRunName(*spec.ID)), nil
 }
 
 func resolveDownloadRootDir(rootDir string) (string, error) {
@@ -617,21 +617,6 @@ func isSupportedDownloadMode(value string) bool {
 
 func supportedDownloadModes() []string {
 	return []string{downloadModeEverything, downloadModeMetadataOnly}
-}
-
-func resolveCreateDownloadRunDir(rootDir string) (string, error) {
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		return "", err
-	}
-	for i := 0; i < 256; i++ {
-		candidate := filepath.Join(rootDir, generateDownloadRunName())
-		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
-			return candidate, nil
-		} else if err != nil {
-			return "", err
-		}
-	}
-	return "", fmt.Errorf("Unable to generate a unique run directory under %s", rootDir)
 }
 
 func validateDownloadRunName(name string) (string, error) {
@@ -713,33 +698,22 @@ func downloadRunReady(metadata downloadRunMetadata) bool {
 	return status == "succeeded" || status == "stopped"
 }
 
-func generateDownloadRunName() string {
+func deterministicDownloadRunName(runID string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(runID)))
 	return fmt.Sprintf(
 		"%s-%s-%s-%s",
-		randomChoice(downloadResultsAdjectives),
-		randomChoice(downloadResultsNouns),
-		randomChoice(downloadResultsVerbs),
-		randomHex(3),
+		deterministicDownloadWord(downloadResultsAdjectives, sum[0]),
+		deterministicDownloadWord(downloadResultsNouns, sum[1]),
+		deterministicDownloadWord(downloadResultsVerbs, sum[2]),
+		hex.EncodeToString(sum[3:6]),
 	)
 }
 
-func randomChoice(values []string) string {
+func deterministicDownloadWord(values []string, seed byte) string {
 	if len(values) == 0 {
 		return "run"
 	}
-	index := 0
-	if len(values) > 1 {
-		index = int(randomUint32() % uint32(len(values)))
-	}
-	return values[index]
-}
-
-func randomUint32() uint32 {
-	var buf [4]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return uint32(time.Now().UnixNano())
-	}
-	return uint32(buf[0])<<24 | uint32(buf[1])<<16 | uint32(buf[2])<<8 | uint32(buf[3])
+	return values[int(seed)%len(values)]
 }
 
 func randomHex(numBytes int) string {
