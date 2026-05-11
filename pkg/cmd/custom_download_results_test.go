@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -619,6 +620,16 @@ func TestPipelineResultManifestAppenderSkipsPreviouslyIndexedResults(t *testing.
 	assert.Equal(t, "results/res_1/files/metrics.json", paths["metrics"])
 }
 
+func TestAppendDownloadJSONLReturnsCloseErrors(t *testing.T) {
+	closeErr := errors.New("close failed")
+	writer := &closeErrorWriter{err: closeErr}
+
+	err := appendDownloadJSONL(writer, map[string]any{"id": "res_1"})
+
+	require.ErrorIs(t, err, closeErr)
+	assert.JSONEq(t, `{"id":"res_1"}`, strings.TrimSpace(writer.String()))
+}
+
 func TestPipelineFailedStillDownloadsDiscoveredResults(t *testing.T) {
 	setDownloadResultsTestEnv(t)
 	cwd := t.TempDir()
@@ -863,6 +874,15 @@ func runDownloadResultsCLI(t *testing.T, args ...string) (string, string, error)
 	root := newDownloadResultsTestRoot(&stdout, &stderr)
 	err := root.Run(context.Background(), append([]string{"boltz-api"}, args...))
 	return stdout.String(), stderr.String(), err
+}
+
+type closeErrorWriter struct {
+	bytes.Buffer
+	err error
+}
+
+func (w *closeErrorWriter) Close() error {
+	return w.err
 }
 
 func newDownloadResultsTestRoot(stdout io.Writer, stderr io.Writer) *cli.Command {

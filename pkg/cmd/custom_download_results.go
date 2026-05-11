@@ -1705,11 +1705,19 @@ func appendDownloadJSONLFile(path string, value map[string]any) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	return appendDownloadJSONL(file, value)
+}
 
-	encoder := json.NewEncoder(file)
+func appendDownloadJSONL(writer io.WriteCloser, value map[string]any) error {
+	encoder := json.NewEncoder(writer)
 	encoder.SetEscapeHTML(false)
-	return encoder.Encode(value)
+	if err := encoder.Encode(value); err != nil {
+		if closeErr := writer.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+	return writer.Close()
 }
 
 func writeDownloadFileAtomically(path string, payload []byte) error {
