@@ -87,6 +87,67 @@ func TestDownloadResultsCommandValidation(t *testing.T) {
 	}
 }
 
+func TestPredictionDownloadResultsDefaultRunDirUsesDeterministicReadableName(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	const runID = "pred_123"
+
+	archiveBytes := makeTarGzArchive(t, map[string]string{"nested/output.txt": "done"})
+	var archiveRequests atomic.Int32
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/v1/predictions/structure-and-binding/" + runID:
+			writeJSON(t, w, predictionResponseJSON(runID, "succeeded", "ws_123", server.URL+"/files/prediction.tar.gz", ""))
+		case "/files/prediction.tar.gz":
+			archiveRequests.Add(1)
+			_, _ = w.Write(archiveBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	firstStdout, firstStderr, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--id", runID,
+	)
+	require.NoError(t, err)
+
+	secondStdout, secondStderr, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--id", runID,
+	)
+	require.NoError(t, err)
+
+	firstRunDir := strings.TrimSpace(firstStdout)
+	secondRunDir := strings.TrimSpace(secondStdout)
+	runName := filepath.Base(firstRunDir)
+	nameParts := strings.Split(runName, "-")
+
+	assert.NotEmpty(t, firstStderr)
+	assert.NotEmpty(t, secondStderr)
+	assert.EqualValues(t, 1, archiveRequests.Load())
+	assert.Equal(t, firstRunDir, secondRunDir)
+	assert.Equal(t, filepath.Join(cwd, downloadResultsDefaultRootDir, deterministicDownloadRunName(runID)), firstRunDir)
+	require.Len(t, nameParts, 4)
+	assert.Contains(t, downloadResultsAdjectives, nameParts[0])
+	assert.Contains(t, downloadResultsNouns, nameParts[1])
+	assert.Contains(t, downloadResultsVerbs, nameParts[2])
+	assert.Len(t, nameParts[3], 6)
+	assert.FileExists(t, filepath.Join(firstRunDir, "outputs", "files", "nested", "output.txt"))
+	assert.FileExists(t, filepath.Join(secondRunDir, "outputs", "files", "nested", "output.txt"))
+}
+
 func TestDownloadResultsMetadataRoundTripPreservesExtraFields(t *testing.T) {
 	runDir := t.TempDir()
 
@@ -120,6 +181,10 @@ func TestInferDownloadRunTypeSupportsStructurePredictionPrefixes(t *testing.T) {
 			assert.Equal(t, downloadRunTypePrediction, runType)
 		})
 	}
+}
+
+func TestDeterministicDownloadRunNameIsStable(t *testing.T) {
+	assert.Equal(t, "clear-pocket-screens-a8d3cc", deterministicDownloadRunName("pred_123"))
 }
 
 func TestPredictionDownloadResultsDefaultProgressJSONL(t *testing.T) {
