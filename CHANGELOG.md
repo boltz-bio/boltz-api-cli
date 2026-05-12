@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.1 (2026-05-12)
+
+Full Changelog: [v0.16.0...v0.16.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.0...v0.16.1)
+
+### Chores
+
+* **internal:** codegen related update ([523e923](https://github.com/boltz-bio/boltz-api-cli/commit/523e923c62b297117254e119b308078d18c336cf))
+
 ## 0.16.0 (2026-05-11)
 
 Full Changelog: [v0.15.7...v0.16.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.15.7...v0.16.0)
