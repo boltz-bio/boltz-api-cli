@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.1 (2026-05-13)
+
+Full Changelog: [v0.18.0...v0.18.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.0...v0.18.1)
+
+### Bug Fixes
+
+* **billing:** mark compute billing stale from webhooks ([4bf1700](https://github.com/boltz-bio/boltz-api-cli/commit/4bf1700a4dcb03b6abb1a0959add4911e17f76c1))
+
 ## 0.18.0 (2026-05-13)
 
 Full Changelog: [v0.17.0...v0.18.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.17.0...v0.18.0)
