@@ -120,6 +120,11 @@ var adminWorkspacesList = cli.Command{
 			Default:   100,
 			QueryPath: "limit",
 		},
+		&requestflag.Flag[string]{
+			Name:      "name",
+			Usage:     "Case-insensitive workspace name prefix to filter by",
+			QueryPath: "name",
+		},
 		&requestflag.Flag[int64]{
 			Name:  "max-items",
 			Usage: "The maximum number of items to return (use -1 for unlimited).",
