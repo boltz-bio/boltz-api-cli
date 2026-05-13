@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.0 (2026-05-13)
+
+Full Changelog: [v0.17.0...v0.18.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.17.0...v0.18.0)
+
+### Features
+
+* **compute:** filter workspaces by name prefix ([5f834bf](https://github.com/boltz-bio/boltz-api-cli/commit/5f834bf62f069ffec1bca9c1ff6323c6fa4b41ab))
+
 ## 0.17.0 (2026-05-13)
 
 Full Changelog: [v0.16.2...v0.17.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.2...v0.17.0)
