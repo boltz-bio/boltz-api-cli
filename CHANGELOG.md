@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.2 (2026-05-13)
+
+Full Changelog: [v0.16.1...v0.16.2](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.1...v0.16.2)
+
 ## 0.16.1 (2026-05-12)
 
 Full Changelog: [v0.16.0...v0.16.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.0...v0.16.1)
