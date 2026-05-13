@@ -119,6 +119,7 @@ func TestAdminWorkspacesList(t *testing.T) {
 			"--after-id", "after_id",
 			"--before-id", "before_id",
 			"--limit", "1",
+			"--name", "x",
 		)
 	})
 }
