@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0 (2026-05-13)
+
+Full Changelog: [v0.16.2...v0.17.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.2...v0.17.0)
+
+### Features
+
+* **admin:** add Compute API Monitor ([a52eaef](https://github.com/boltz-bio/boltz-api-cli/commit/a52eaefe6486e03b2ec07e14d684fd18f26f5ff5))
+
 ## 0.16.2 (2026-05-13)
 
 Full Changelog: [v0.16.1...v0.16.2](https://github.com/boltz-bio/boltz-api-cli/compare/v0.16.1...v0.16.2)
