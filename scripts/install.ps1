@@ -60,12 +60,54 @@ function Warn-ExistingConfig {
 
 Warn-ExistingConfig
 
-$arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
-    "X64" { "amd64" }
-    "X86" { "386" }
-    "Arm64" { "arm64" }
-    default { Fail "Unsupported CPU architecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)" }
+function ConvertTo-InstallArch($Architecture) {
+    if ($null -eq $Architecture) {
+        return ""
+    }
+
+    $value = $Architecture.ToString().Trim()
+    if (-not $value) {
+        return ""
+    }
+
+    switch -Regex ($value) {
+        "^(X64|AMD64|x86_64)$" { return "amd64" }
+        "^(X86|x86|I386|I686|386)$" { return "386" }
+        "^(Arm64|ARM64|AARCH64)$" { return "arm64" }
+        default { return "" }
+    }
 }
+
+function Get-InstallArch {
+    $candidates = @()
+    try {
+        $candidates += [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+    } catch {
+        # Windows PowerShell on older .NET Frameworks may not expose RuntimeInformation.
+    }
+    $candidates += $env:PROCESSOR_ARCHITEW6432
+    $candidates += $env:PROCESSOR_ARCHITECTURE
+
+    foreach ($candidate in $candidates) {
+        $normalized = ConvertTo-InstallArch $candidate
+        if ($normalized) {
+            return $normalized
+        }
+    }
+
+    $candidateList = @(
+        $candidates |
+            Where-Object { $null -ne $_ -and $_.ToString().Trim() } |
+            ForEach-Object { $_.ToString().Trim() }
+    ) -join ", "
+    if (-not $candidateList) {
+        $candidateList = "unknown"
+    }
+
+    Fail "Unsupported CPU architecture: $candidateList"
+}
+
+$arch = Get-InstallArch
 
 if ($Version -eq "latest") {
     $InstallBaseUrl = $InstallBaseUrl.TrimEnd("/")
