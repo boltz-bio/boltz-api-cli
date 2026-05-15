@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.3 (2026-05-15)
+
+Full Changelog: [v0.18.2...v0.18.3](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.2...v0.18.3)
+
+### Bug Fixes
+
+* **install:** support Windows PowerShell arch fallback ([c7146f3](https://github.com/boltz-bio/boltz-api-cli/commit/c7146f32d25d3d10263b1dd28d54bee8d1ca4ccc))
+
 ## 0.18.2 (2026-05-15)
 
 Full Changelog: [v0.18.1...v0.18.2](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.1...v0.18.2)
