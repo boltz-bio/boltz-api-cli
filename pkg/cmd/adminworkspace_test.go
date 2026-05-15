@@ -18,6 +18,7 @@ func TestAdminWorkspacesCreate(t *testing.T) {
 			"admin:workspaces", "create",
 			"--data-retention", "{unit: hours, value: 1}",
 			"--name", "x",
+			"--spending-limit", "{limit: {amount: 5000, currency: MILLI_USD}, type: lifetime}",
 		)
 	})
 
@@ -33,6 +34,8 @@ func TestAdminWorkspacesCreate(t *testing.T) {
 			"--data-retention.unit", "hours",
 			"--data-retention.value", "1",
 			"--name", "x",
+			"--spending-limit.limit", "{amount: 5000, currency: MILLI_USD}",
+			"--spending-limit.type", "lifetime",
 		)
 	})
 
@@ -42,7 +45,12 @@ func TestAdminWorkspacesCreate(t *testing.T) {
 			"data_retention:\n" +
 			"  unit: hours\n" +
 			"  value: 1\n" +
-			"name: x\n")
+			"name: x\n" +
+			"spending_limit:\n" +
+			"  limit:\n" +
+			"    amount: 5000\n" +
+			"    currency: MILLI_USD\n" +
+			"  type: lifetime\n")
 		mocktest.TestRunMockTestWithPipeAndFlags(
 			t, pipeData,
 			"--api-key", "string",
@@ -131,6 +139,63 @@ func TestAdminWorkspacesArchive(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"admin:workspaces", "archive",
+			"--workspace-id", "workspace_id",
+		)
+	})
+}
+
+func TestAdminWorkspacesRetrieveSpendingLimit(t *testing.T) {
+	t.Skip("Mock server tests are disabled")
+	t.Run("regular flags", func(t *testing.T) {
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"admin:workspaces", "retrieve-spending-limit",
+			"--workspace-id", "workspace_id",
+		)
+	})
+}
+
+func TestAdminWorkspacesSetSpendingLimit(t *testing.T) {
+	t.Skip("Mock server tests are disabled")
+	t.Run("regular flags", func(t *testing.T) {
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"admin:workspaces", "set-spending-limit",
+			"--workspace-id", "workspace_id",
+			"--limit", "{amount: 5000, currency: MILLI_USD}",
+			"--type", "lifetime",
+		)
+	})
+
+	t.Run("inner flags", func(t *testing.T) {
+		// Check that inner flags have been set up correctly
+		requestflag.CheckInnerFlags(adminWorkspacesSetSpendingLimit)
+
+		// Alternative argument passing style using inner flags
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"admin:workspaces", "set-spending-limit",
+			"--workspace-id", "workspace_id",
+			"--limit.amount", "5000",
+			"--limit.currency", "MILLI_USD",
+			"--type", "lifetime",
+		)
+	})
+
+	t.Run("piping data", func(t *testing.T) {
+		// Test piping YAML data over stdin
+		pipeData := []byte("" +
+			"limit:\n" +
+			"  amount: 5000\n" +
+			"  currency: MILLI_USD\n" +
+			"type: lifetime\n")
+		mocktest.TestRunMockTestWithPipeAndFlags(
+			t, pipeData,
+			"--api-key", "string",
+			"admin:workspaces", "set-spending-limit",
 			"--workspace-id", "workspace_id",
 		)
 	})

@@ -173,6 +173,8 @@ func init() {
 					&adminWorkspacesUpdate,
 					&adminWorkspacesList,
 					&adminWorkspacesArchive,
+					&adminWorkspacesRetrieveSpendingLimit,
+					&adminWorkspacesSetSpendingLimit,
 				},
 			},
 			{
