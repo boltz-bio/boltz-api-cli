@@ -29,6 +29,10 @@ var adminWorkspacesCreate = requestflag.WithInnerFlags(cli.Command{
 			Usage:    "Workspace name",
 			BodyPath: "name",
 		},
+		&requestflag.Flag[map[string]any]{
+			Name:     "spending-limit",
+			BodyPath: "spending_limit",
+		},
 	},
 	Action:          handleAdminWorkspacesCreate,
 	HideHelpCommand: true,
@@ -43,6 +47,17 @@ var adminWorkspacesCreate = requestflag.WithInnerFlags(cli.Command{
 			Name:       "data-retention.value",
 			Usage:      "Duration value. Maximum retention is 14 days (or 336 hours).",
 			InnerField: "value",
+		},
+	},
+	"spending-limit": {
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "spending-limit.limit",
+			InnerField: "limit",
+		},
+		&requestflag.InnerFlag[string]{
+			Name:       "spending-limit.type",
+			Usage:      `Allowed values: "lifetime".`,
+			InnerField: "type",
 		},
 	},
 })
@@ -148,6 +163,61 @@ var adminWorkspacesArchive = cli.Command{
 	Action:          handleAdminWorkspacesArchive,
 	HideHelpCommand: true,
 }
+
+var adminWorkspacesRetrieveSpendingLimit = cli.Command{
+	Name:    "retrieve-spending-limit",
+	Usage:   "Get a workspace spending limit",
+	Suggest: true,
+	Flags: []cli.Flag{
+		&requestflag.Flag[string]{
+			Name:      "workspace-id",
+			Required:  true,
+			PathParam: "workspace_id",
+		},
+	},
+	Action:          handleAdminWorkspacesRetrieveSpendingLimit,
+	HideHelpCommand: true,
+}
+
+var adminWorkspacesSetSpendingLimit = requestflag.WithInnerFlags(cli.Command{
+	Name:    "set-spending-limit",
+	Usage:   "Set a workspace spending limit",
+	Suggest: true,
+	Flags: []cli.Flag{
+		&requestflag.Flag[string]{
+			Name:      "workspace-id",
+			Required:  true,
+			PathParam: "workspace_id",
+		},
+		&requestflag.Flag[map[string]any]{
+			Name:     "limit",
+			Required: true,
+			BodyPath: "limit",
+		},
+		&requestflag.Flag[string]{
+			Name:     "type",
+			Usage:    `Allowed values: "lifetime".`,
+			Default:  "lifetime",
+			Const:    true,
+			BodyPath: "type",
+		},
+	},
+	Action:          handleAdminWorkspacesSetSpendingLimit,
+	HideHelpCommand: true,
+}, map[string][]requestflag.HasOuterFlag{
+	"limit": {
+		&requestflag.InnerFlag[int64]{
+			Name:       "limit.amount",
+			Usage:      "Workspace spending limit amount in milli-USD. Tracking starts when the limit is configured; prior or already-committed unreserved work is not counted in this workspace cap ledger.",
+			InnerField: "amount",
+		},
+		&requestflag.InnerFlag[string]{
+			Name:       "limit.currency",
+			Usage:      "Workspace spending limits currently support milli-USD only.",
+			InnerField: "currency",
+		},
+	},
+})
 
 func handleAdminWorkspacesCreate(ctx context.Context, cmd *cli.Command) error {
 	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
@@ -374,6 +444,97 @@ func handleAdminWorkspacesArchive(ctx context.Context, cmd *cli.Command) error {
 		Format:         format,
 		RawOutput:      cmd.Root().Bool("raw-output"),
 		Title:          "admin:workspaces archive",
+		Transform:      transform,
+	})
+}
+
+func handleAdminWorkspacesRetrieveSpendingLimit(ctx context.Context, cmd *cli.Command) error {
+	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
+	unusedArgs := cmd.Args().Slice()
+	if !cmd.IsSet("workspace-id") && len(unusedArgs) > 0 {
+		cmd.Set("workspace-id", unusedArgs[0])
+		unusedArgs = unusedArgs[1:]
+	}
+	if len(unusedArgs) > 0 {
+		return fmt.Errorf("Unexpected extra arguments: %v", unusedArgs)
+	}
+
+	options, err := flagOptions(
+		cmd,
+		apiquery.NestedQueryFormatBrackets,
+		apiquery.ArrayQueryFormatRepeat,
+		EmptyBody,
+		false,
+	)
+	if err != nil {
+		return err
+	}
+
+	var res []byte
+	options = append(options, option.WithResponseBodyInto(&res))
+	_, err = client.Admin.Workspaces.GetSpendingLimit(ctx, cmd.Value("workspace-id").(string), options...)
+	if err != nil {
+		return err
+	}
+
+	obj := gjson.ParseBytes(res)
+	format := cmd.Root().String("format")
+	explicitFormat := cmd.Root().IsSet("format")
+	transform := cmd.Root().String("transform")
+	return ShowJSON(obj, ShowJSONOpts{
+		ExplicitFormat: explicitFormat,
+		Format:         format,
+		RawOutput:      cmd.Root().Bool("raw-output"),
+		Title:          "admin:workspaces retrieve-spending-limit",
+		Transform:      transform,
+	})
+}
+
+func handleAdminWorkspacesSetSpendingLimit(ctx context.Context, cmd *cli.Command) error {
+	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
+	unusedArgs := cmd.Args().Slice()
+	if !cmd.IsSet("workspace-id") && len(unusedArgs) > 0 {
+		cmd.Set("workspace-id", unusedArgs[0])
+		unusedArgs = unusedArgs[1:]
+	}
+	if len(unusedArgs) > 0 {
+		return fmt.Errorf("Unexpected extra arguments: %v", unusedArgs)
+	}
+
+	options, err := flagOptions(
+		cmd,
+		apiquery.NestedQueryFormatBrackets,
+		apiquery.ArrayQueryFormatRepeat,
+		ApplicationJSON,
+		false,
+	)
+	if err != nil {
+		return err
+	}
+
+	params := boltzapi.AdminWorkspaceSetSpendingLimitParams{}
+
+	var res []byte
+	options = append(options, option.WithResponseBodyInto(&res))
+	_, err = client.Admin.Workspaces.SetSpendingLimit(
+		ctx,
+		cmd.Value("workspace-id").(string),
+		params,
+		options...,
+	)
+	if err != nil {
+		return err
+	}
+
+	obj := gjson.ParseBytes(res)
+	format := cmd.Root().String("format")
+	explicitFormat := cmd.Root().IsSet("format")
+	transform := cmd.Root().String("transform")
+	return ShowJSON(obj, ShowJSONOpts{
+		ExplicitFormat: explicitFormat,
+		Format:         format,
+		RawOutput:      cmd.Root().Bool("raw-output"),
+		Title:          "admin:workspaces set-spending-limit",
 		Transform:      transform,
 	})
 }
