@@ -2,4 +2,4 @@
 
 package cmd
 
-const Version = "0.18.3" // x-release-please-version
+const Version = "0.18.4" // x-release-please-version
