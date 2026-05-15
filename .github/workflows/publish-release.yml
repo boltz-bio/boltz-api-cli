@@ -32,13 +32,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Configure AWS credentials
-      if: github.repository == 'boltz-bio/boltz-compute-api-cli' && startsWith(github.ref, 'refs/tags/v')
+      if: github.repository == 'boltz-bio/boltz-api-cli' && startsWith(github.ref, 'refs/tags/v')
       uses: aws-actions/configure-aws-credentials@v5
       with:
         role-to-assume: arn:aws:iam::421498156696:role/boltz-platform-cli-install-github-actions-irsa
         aws-region: us-east-1
     - name: Publish install assets
-      if: github.repository == 'boltz-bio/boltz-compute-api-cli' && startsWith(github.ref, 'refs/tags/v')
+      if: github.repository == 'boltz-bio/boltz-api-cli' && startsWith(github.ref, 'refs/tags/v')
       env:
         BOLTZ_API_INSTALL_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.BOLTZ_API_INSTALL_CLOUDFRONT_DISTRIBUTION_ID }}
       run: ./scripts/publish-install-assets.sh
