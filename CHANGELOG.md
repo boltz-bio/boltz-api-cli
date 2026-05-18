@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.19.0 (2026-05-18)
+
+Full Changelog: [v0.18.4...v0.19.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.4...v0.19.0)
+
+### Features
+
+* [codex] Add Benchling workspace spending limits ([d1d4a6f](https://github.com/boltz-bio/boltz-api-cli/commit/d1d4a6ffd2268802a77310f8549c6f45f05b1efd))
+
+
+### Bug Fixes
+
+* **temporal:** require running workers in readiness probes ([e606b6e](https://github.com/boltz-bio/boltz-api-cli/commit/e606b6e8815a441eacadbdb545ec4a6375274985))
+
 ## 0.18.4 (2026-05-15)
 
 Full Changelog: [v0.18.3...v0.18.4](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.3...v0.18.4)
