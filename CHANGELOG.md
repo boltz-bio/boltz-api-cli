@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.19.1 (2026-05-22)
+
+Full Changelog: [v0.19.0...v0.19.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.19.0...v0.19.1)
+
+### Bug Fixes
+
+* **compute-api:** harden activity retry semantics ([0249c00](https://github.com/boltz-bio/boltz-api-cli/commit/0249c003e7f3d9be1d210b66ad49d539574c322f))
+
 ## 0.19.0 (2026-05-18)
 
 Full Changelog: [v0.18.4...v0.19.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.18.4...v0.19.0)
