@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0 (2026-05-23)
+
+Full Changelog: [v0.19.1...v0.20.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.19.1...v0.20.0)
+
+### Features
+
+* **download-results:** parallelize pipeline artifact downloads ([598514f](https://github.com/boltz-bio/boltz-api-cli/commit/598514f2c00e855182074a7abe07e47c5ad319d4))
+
 ## 0.19.1 (2026-05-22)
 
 Full Changelog: [v0.19.0...v0.19.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.19.0...v0.19.1)
