@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -83,6 +84,11 @@ func TestDownloadResultsCommandValidation(t *testing.T) {
 			name:    "reject non-default prediction download mode",
 			args:    []string{"download-results", "--id", "pred_123", "--download-mode", "metadata_only"},
 			wantErr: "--download-mode only supports pipeline run IDs",
+		},
+		{
+			name:    "reject non-positive workers",
+			args:    []string{"download-results", "--id", "prot_des_123", "--workers", "0"},
+			wantErr: "--workers must be at least 1",
 		},
 	}
 
@@ -546,7 +552,7 @@ func TestPipelineDownloadResultsHappyPathAllRunTypes(t *testing.T) {
 				case testCase.getPath:
 					writeJSON(t, w, pipelineGetResponseJSON(testCase.runID, "succeeded", "ws_123", "res_2", ""))
 				case testCase.resultsPath:
-					require.Equal(t, "20", r.URL.Query().Get("limit"))
+					require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
 					if r.URL.Query().Get("after_id") == "res_2" {
 						writeJSON(t, w, emptyPipelinePageJSON())
 						return
@@ -617,6 +623,7 @@ func TestPipelineDownloadResultsMetadataOnlySkipsArtifacts(t *testing.T) {
 		case "/compute/v1/protein/design/" + runID:
 			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_2", ""))
 		case "/compute/v1/protein/design/" + runID + "/results":
+			require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
 			if r.URL.Query().Get("after_id") == "res_2" {
 				writeJSON(t, w, emptyPipelinePageJSON())
 				return
@@ -658,6 +665,157 @@ func TestPipelineDownloadResultsMetadataOnlySkipsArtifacts(t *testing.T) {
 	assertPipelineResultMetadata(t, runID, manifest[0])
 }
 
+func TestPipelineDownloadResultsUsesWorkersForArchiveMaterialization(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	runID := "prot_des_123"
+	archiveBytes := makeTarGzArchive(t, map[string]string{"result.txt": "parallel"})
+	var currentArchiveRequests atomic.Int32
+	var maxArchiveRequests atomic.Int32
+
+	recordArchiveRequest := func() func() {
+		current := currentArchiveRequests.Add(1)
+		for {
+			max := maxArchiveRequests.Load()
+			if current <= max || maxArchiveRequests.CompareAndSwap(max, current) {
+				break
+			}
+		}
+		return func() {
+			currentArchiveRequests.Add(-1)
+		}
+	}
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/v1/protein/design/" + runID:
+			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_2", ""))
+		case "/compute/v1/protein/design/" + runID + "/results":
+			require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
+			if r.URL.Query().Get("after_id") == "res_2" {
+				writeJSON(t, w, emptyPipelinePageJSON())
+				return
+			}
+			writeJSON(t, w, pipelineResultsPageJSON(server.URL, runID, "res_1", "res_2"))
+		case "/files/" + runID + "/res_1.tar.gz", "/files/" + runID + "/res_2.tar.gz":
+			done := recordArchiveRequest()
+			defer done()
+			time.Sleep(50 * time.Millisecond)
+			_, _ = w.Write(archiveBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--id", runID,
+		"--name", "pipeline-workers",
+		"--num_workers", "2",
+	)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, maxArchiveRequests.Load(), int32(2))
+}
+
+func TestPipelineDownloadResultsKeepsManifestOrderAfterConcurrentPartialFailure(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	runID := "prot_des_123"
+	archiveBytes := makeTarGzArchive(t, map[string]string{"result.txt": "ordered"})
+	res2Started := make(chan struct{})
+	var res2StartedOnce sync.Once
+	var archive1Requests atomic.Int32
+	var archive2Requests atomic.Int32
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/v1/protein/design/" + runID:
+			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_2", ""))
+		case "/compute/v1/protein/design/" + runID + "/results":
+			require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
+			if r.URL.Query().Get("after_id") == "res_2" {
+				writeJSON(t, w, emptyPipelinePageJSON())
+				return
+			}
+			writeJSON(t, w, pipelineResultsPageJSON(server.URL, runID, "res_1", "res_2"))
+		case "/files/" + runID + "/res_1.tar.gz":
+			if archive1Requests.Add(1) == 1 {
+				select {
+				case <-res2Started:
+				case <-time.After(2 * time.Second):
+					http.Error(w, "timed out waiting for concurrent res_2 request", http.StatusInternalServerError)
+					return
+				}
+				writePartialArchiveAndClose(t, w, archiveBytes[:10], len(archiveBytes))
+				return
+			}
+			_, _ = w.Write(archiveBytes)
+		case "/files/" + runID + "/res_2.tar.gz":
+			archive2Requests.Add(1)
+			res2StartedOnce.Do(func() { close(res2Started) })
+			_, _ = w.Write(archiveBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	_, _, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--id", runID,
+		"--name", "pipeline-order",
+		"--workers", "2",
+	)
+	require.Error(t, err)
+
+	runDir := filepath.Join(cwd, downloadResultsDefaultRootDir, "pipeline-order")
+	assert.FileExists(t, filepath.Join(runDir, "results", "res_2", "files", "result.txt"))
+	metadata := mustLoadDownloadMetadata(t, runDir)
+	require.NotNil(t, metadata.Pending)
+	assert.Equal(t, []string{"res_1", "res_2"}, metadata.Pending.ResultIDs)
+
+	manifestPath := filepath.Join(runDir, "results", "index.jsonl")
+	manifestBody, readErr := os.ReadFile(manifestPath)
+	if readErr == nil {
+		assert.Empty(t, strings.TrimSpace(string(manifestBody)))
+	} else {
+		assert.True(t, errors.Is(readErr, os.ErrNotExist), "unexpected manifest read error: %v", readErr)
+	}
+
+	stdout, stderr, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--name", "pipeline-order",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, runDir+"\n", stdout)
+	assert.NotEmpty(t, stderr)
+	assert.EqualValues(t, 2, archive1Requests.Load())
+	assert.EqualValues(t, 1, archive2Requests.Load())
+
+	manifest := readDownloadResultsTestJSONL(t, manifestPath)
+	require.Len(t, manifest, 2)
+	assert.Equal(t, "res_1", manifest[0]["id"])
+	assert.Equal(t, "res_2", manifest[1]["id"])
+	metadata = mustLoadDownloadMetadata(t, runDir)
+	assert.Nil(t, metadata.Pending)
+}
+
 func TestPipelineDownloadResultsResumesPendingPageAfterPartialFailure(t *testing.T) {
 	setDownloadResultsTestEnv(t)
 	cwd := t.TempDir()
@@ -673,7 +831,7 @@ func TestPipelineDownloadResultsResumesPendingPageAfterPartialFailure(t *testing
 		case "/compute/v1/protein/design/" + runID:
 			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_2", ""))
 		case "/compute/v1/protein/design/" + runID + "/results":
-			require.Equal(t, "20", r.URL.Query().Get("limit"))
+			require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
 			if r.URL.Query().Get("after_id") == "res_2" {
 				writeJSON(t, w, emptyPipelinePageJSON())
 				return
@@ -700,6 +858,7 @@ func TestPipelineDownloadResultsResumesPendingPageAfterPartialFailure(t *testing
 		"download-results",
 		"--id", runID,
 		"--name", "pipeline-resume",
+		"--workers", "1",
 	)
 	require.Error(t, err)
 

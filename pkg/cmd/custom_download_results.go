@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltz-bio/boltz-api-go/option"
@@ -36,7 +37,8 @@ const (
 	downloadResultsResultMetadataName = "metadata.json"
 	downloadResultsResultIndexName    = "index.jsonl"
 	downloadResultsSchemaVersion      = 1
-	downloadResultsPageLimit          = 20
+	downloadResultsPageLimit          = 1000
+	downloadResultsDefaultWorkers     = 32
 	downloadResultsSummaryIntervalSec = 30 * time.Second
 	downloadProgressFormatJSONL       = "jsonl"
 	downloadProgressFormatText        = "text"
@@ -107,6 +109,12 @@ var downloadResultsCommand = &cli.Command{
 			Usage: "Pipeline artifact download mode (`everything` or `metadata_only`).",
 			Value: downloadModeEverything,
 		},
+		&cli.IntFlag{
+			Name:    "workers",
+			Aliases: []string{"num-workers", "num_workers"},
+			Usage:   "Number of concurrent pipeline result archive downloads",
+			Value:   downloadResultsDefaultWorkers,
+		},
 		&cli.BoolFlag{
 			Name:    "verbose",
 			Aliases: []string{"v"},
@@ -138,6 +146,7 @@ type downloadResultsSpec struct {
 	ProgressFormat      string
 	DownloadMode        string
 	DownloadModeSet     bool
+	Workers             int
 	Verbose             bool
 }
 
@@ -201,6 +210,7 @@ type downloadResultsEngine struct {
 }
 
 type downloadResultsSink struct {
+	mu                   sync.Mutex
 	verbose              bool
 	progressFormat       string
 	writer               io.Writer
@@ -418,6 +428,7 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 	pollIntervalSeconds := cmd.Float64("poll-interval-seconds")
 	progressFormat := normalizeDownloadProgressFormat(cmd.String("progress-format"))
 	downloadMode := normalizeDownloadMode(cmd.String("download-mode"))
+	workers := cmd.Int("workers")
 	if pollIntervalSeconds < 0 {
 		return downloadResultsSpec{}, errors.New("--poll-interval-seconds must be non-negative")
 	}
@@ -426,6 +437,9 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 	}
 	if !isSupportedDownloadMode(downloadMode) {
 		return downloadResultsSpec{}, fmt.Errorf("--download-mode must be one of: %s", strings.Join(supportedDownloadModes(), ", "))
+	}
+	if workers < 1 {
+		return downloadResultsSpec{}, errors.New("--workers must be at least 1")
 	}
 	if name != nil && runDir != nil {
 		return downloadResultsSpec{}, errors.New("--name and --run-dir are mutually exclusive")
@@ -461,6 +475,7 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 		ProgressFormat:      progressFormat,
 		DownloadMode:        downloadMode,
 		DownloadModeSet:     cmd.IsSet("download-mode"),
+		Workers:             workers,
 		Verbose:             cmd.Bool("verbose"),
 	}, nil
 }
@@ -477,7 +492,7 @@ func (e *downloadResultsEngine) download(ctx context.Context, spec downloadResul
 			return "", err
 		}
 	default:
-		if err := e.waitForPipeline(ctx, runDir, &metadata, spec.PollIntervalSeconds); err != nil {
+		if err := e.waitForPipeline(ctx, runDir, &metadata, spec.PollIntervalSeconds, spec.Workers); err != nil {
 			return "", err
 		}
 	}
@@ -1016,7 +1031,7 @@ func (e *downloadResultsEngine) waitForPrediction(ctx context.Context, runDir st
 	}
 }
 
-func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir string, metadata *downloadRunMetadata, pollIntervalSeconds float64) error {
+func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir string, metadata *downloadRunMetadata, pollIntervalSeconds float64, workers int) error {
 	runID := derefString(metadata.Remote.RunID)
 	if runID == "" {
 		return fmt.Errorf("Run %s has no confirmed remote run ID", runDir)
@@ -1044,7 +1059,7 @@ func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir stri
 		madeProgress := false
 		for {
 			if metadata.Pending != nil && metadata.Pending.Kind == downloadPendingKindResultPage {
-				if err := e.drainPendingPipelinePage(ctx, runDir, metadata, manifest); err != nil {
+				if err := e.drainPendingPipelinePage(ctx, runDir, metadata, manifest, workers); err != nil {
 					return err
 				}
 				madeProgress = true
@@ -1120,7 +1135,7 @@ func (e *downloadResultsEngine) discoverNextPipelinePage(ctx context.Context, ru
 	return true, nil
 }
 
-func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender) error {
+func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender, workers int) error {
 	if metadata.Pending == nil || metadata.Pending.Kind != downloadPendingKindResultPage {
 		return errors.New("Pipeline metadata does not contain a pending page")
 	}
@@ -1138,21 +1153,49 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 		results[result.ID] = result
 	}
 
-	for len(metadata.Pending.ResultIDs) > 0 {
-		resultID := metadata.Pending.ResultIDs[0]
+	pendingResults := make([]downloadPipelineResultInfo, 0, len(metadata.Pending.ResultIDs))
+	for _, resultID := range metadata.Pending.ResultIDs {
 		result, ok := results[resultID]
 		if !ok {
 			return fmt.Errorf("Unable to resume result page; result %s is no longer present", resultID)
 		}
+		pendingResults = append(pendingResults, result)
+	}
 
-		if err := e.materializePipelineResult(ctx, runDir, metadata, manifest, result); err != nil {
-			return err
+	switch metadata.DownloadMode {
+	case downloadModeMetadataOnly:
+		for _, result := range pendingResults {
+			if err := manifest.appendMetadata(result.Metadata, result.ID); err != nil {
+				return err
+			}
+			metadata.Pending.ResultIDs = metadata.Pending.ResultIDs[1:]
+			if err := saveDownloadMetadata(runDir, *metadata); err != nil {
+				return err
+			}
+		}
+	case downloadModeEverything:
+		materialized, materializeErr := e.materializePendingPipelineResults(ctx, runDir, metadata, pendingResults, workers)
+		appendable := orderedMaterializedPrefix(pendingResults, materialized)
+		appendedIDs := make(map[string]struct{}, len(appendable))
+		for _, result := range appendable {
+			if err := manifest.appendResult(result.resultDir, result.resultID); err != nil {
+				return err
+			}
+			appendedIDs[result.resultID] = struct{}{}
 		}
 
-		metadata.Pending.ResultIDs = metadata.Pending.ResultIDs[1:]
-		if err := saveDownloadMetadata(runDir, *metadata); err != nil {
-			return err
+		if len(appendedIDs) > 0 {
+			metadata.Pending.ResultIDs = filterPendingResultIDs(metadata.Pending.ResultIDs, appendedIDs)
+			if err := saveDownloadMetadata(runDir, *metadata); err != nil {
+				return err
+			}
 		}
+
+		if materializeErr != nil {
+			return materializeErr
+		}
+	default:
+		return fmt.Errorf("Unsupported download mode %q", metadata.DownloadMode)
 	}
 
 	metadata.CursorAfterID = cloneString(metadata.Pending.PageLastID)
@@ -1160,28 +1203,135 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 	return saveDownloadMetadata(runDir, *metadata)
 }
 
-func (e *downloadResultsEngine) materializePipelineResult(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender, result downloadPipelineResultInfo) error {
-	switch metadata.DownloadMode {
-	case downloadModeMetadataOnly:
-		return manifest.appendMetadata(result.Metadata, result.ID)
-	case downloadModeEverything:
-		resultDir := filepath.Join(runDir, "results", result.ID)
-		archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
-		if err != nil {
-			return err
+func orderedMaterializedPrefix(pending []downloadPipelineResultInfo, materialized []materializedPipelineResult) []materializedPipelineResult {
+	materializedByID := make(map[string]materializedPipelineResult, len(materialized))
+	for _, result := range materialized {
+		materializedByID[result.resultID] = result
+	}
+
+	ordered := make([]materializedPipelineResult, 0, len(materialized))
+	for _, result := range pending {
+		materializedResult, ok := materializedByID[result.ID]
+		if !ok {
+			break
 		}
-		if err := savePipelineResultMetadata(resultDir, result); err != nil {
-			return err
-		}
-		if !isDownloadMaterialized(archivePath, extractedDir) {
-			if err := e.materializeArchive(ctx, runDir, metadata, result.ArchiveURL, archivePath, extractedDir, map[string]any{"result_id": result.ID}); err != nil {
-				return err
+		ordered = append(ordered, materializedResult)
+	}
+	return ordered
+}
+
+type materializedPipelineResult struct {
+	resultID  string
+	resultDir string
+}
+
+type pipelineResultMaterialization struct {
+	result materializedPipelineResult
+	err    error
+}
+
+func (e *downloadResultsEngine) materializePendingPipelineResults(ctx context.Context, runDir string, metadata *downloadRunMetadata, results []downloadPipelineResultInfo, workers int) ([]materializedPipelineResult, error) {
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	workerCount := normalizeDownloadWorkerCount(workers, len(results))
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan downloadPipelineResultInfo)
+	done := make(chan pipelineResultMaterialization, len(results))
+	var wg sync.WaitGroup
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for result := range jobs {
+				materialized, err := e.materializePipelineResultArchive(workerCtx, runDir, metadata, result)
+				done <- pipelineResultMaterialization{result: materialized, err: err}
+				if err != nil {
+					cancel()
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, result := range results {
+			select {
+			case <-workerCtx.Done():
+				return
+			case jobs <- result:
 			}
 		}
-		return manifest.appendResult(resultDir, result.ID)
-	default:
-		return fmt.Errorf("Unsupported download mode %q", metadata.DownloadMode)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	materializedByID := make(map[string]materializedPipelineResult, len(results))
+	var firstErr error
+	for result := range done {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+				cancel()
+			}
+			continue
+		}
+		materializedByID[result.result.resultID] = result.result
 	}
+
+	materialized := make([]materializedPipelineResult, 0, len(materializedByID))
+	for _, result := range results {
+		if materializedResult, ok := materializedByID[result.ID]; ok {
+			materialized = append(materialized, materializedResult)
+		}
+	}
+
+	return materialized, firstErr
+}
+
+func (e *downloadResultsEngine) materializePipelineResultArchive(ctx context.Context, runDir string, metadata *downloadRunMetadata, result downloadPipelineResultInfo) (materializedPipelineResult, error) {
+	resultDir := filepath.Join(runDir, "results", result.ID)
+	archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
+	if err != nil {
+		return materializedPipelineResult{}, err
+	}
+	if err := savePipelineResultMetadata(resultDir, result); err != nil {
+		return materializedPipelineResult{}, err
+	}
+	if !isDownloadMaterialized(archivePath, extractedDir) {
+		if err := e.materializeArchive(ctx, runDir, metadata, result.ArchiveURL, archivePath, extractedDir, map[string]any{"result_id": result.ID}); err != nil {
+			return materializedPipelineResult{}, err
+		}
+	}
+	return materializedPipelineResult{resultID: result.ID, resultDir: resultDir}, nil
+}
+
+func normalizeDownloadWorkerCount(workers int, jobs int) int {
+	if workers < 1 {
+		workers = 1
+	}
+	if jobs > 0 && workers > jobs {
+		return jobs
+	}
+	return workers
+}
+
+func filterPendingResultIDs(resultIDs []string, completedIDs map[string]struct{}) []string {
+	remaining := resultIDs[:0]
+	for _, resultID := range resultIDs {
+		if _, ok := completedIDs[resultID]; ok {
+			continue
+		}
+		remaining = append(remaining, resultID)
+	}
+	return remaining
 }
 
 func (e *downloadResultsEngine) materializeArchive(ctx context.Context, runDir string, metadata *downloadRunMetadata, archiveURL string, archivePath string, extractedDir string, details map[string]any) error {
@@ -1843,6 +1993,8 @@ func pipelineRunningSummary(latestResultID *string) string {
 }
 
 func (s *downloadResultsSink) info(event string, message string, runDir string, metadata *downloadRunMetadata, details map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.progressFormat == downloadProgressFormatJSONL {
 		s.writeJSONL(event, message, runDir, metadata, details)
 		return
@@ -1858,10 +2010,13 @@ func (s *downloadResultsSink) maybeRunningSummary(event string, message string, 
 		return
 	}
 	now := time.Now()
+	s.mu.Lock()
 	if !s.lastRunningSummaryAt.IsZero() && now.Sub(s.lastRunningSummaryAt) < downloadResultsSummaryIntervalSec {
+		s.mu.Unlock()
 		return
 	}
 	s.lastRunningSummaryAt = now
+	s.mu.Unlock()
 	s.info(event, message, runDir, metadata, details)
 }
 
