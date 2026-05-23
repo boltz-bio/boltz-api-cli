@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltz-bio/boltz-api-go/option"
@@ -36,7 +37,8 @@ const (
 	downloadResultsResultMetadataName = "metadata.json"
 	downloadResultsResultIndexName    = "index.jsonl"
 	downloadResultsSchemaVersion      = 1
-	downloadResultsPageLimit          = 20
+	downloadResultsPageLimit          = 1000
+	downloadResultsDefaultWorkers     = 32
 	downloadResultsSummaryIntervalSec = 30 * time.Second
 	downloadProgressFormatJSONL       = "jsonl"
 	downloadProgressFormatText        = "text"
@@ -100,6 +102,12 @@ var downloadResultsCommand = &cli.Command{
 			Usage: "Format for progress logs written to stderr (`jsonl` or `text`). `jsonl` is the default agent-friendly format.",
 			Value: downloadProgressFormatJSONL,
 		},
+		&cli.IntFlag{
+			Name:    "workers",
+			Aliases: []string{"num-workers", "num_workers"},
+			Usage:   "Number of concurrent pipeline result archive downloads",
+			Value:   downloadResultsDefaultWorkers,
+		},
 		&cli.BoolFlag{
 			Name:    "verbose",
 			Aliases: []string{"v"},
@@ -129,6 +137,7 @@ type downloadResultsSpec struct {
 	WorkspaceID         *string
 	PollIntervalSeconds float64
 	ProgressFormat      string
+	Workers             int
 	Verbose             bool
 }
 
@@ -190,6 +199,7 @@ type downloadResultsEngine struct {
 }
 
 type downloadResultsSink struct {
+	mu                   sync.Mutex
 	verbose              bool
 	progressFormat       string
 	writer               io.Writer
@@ -406,11 +416,15 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 	workspaceID := trimOptionalString(cmd.String("workspace-id"))
 	pollIntervalSeconds := cmd.Float64("poll-interval-seconds")
 	progressFormat := normalizeDownloadProgressFormat(cmd.String("progress-format"))
+	workers := cmd.Int("workers")
 	if pollIntervalSeconds < 0 {
 		return downloadResultsSpec{}, errors.New("--poll-interval-seconds must be non-negative")
 	}
 	if !isSupportedDownloadProgressFormat(progressFormat) {
 		return downloadResultsSpec{}, fmt.Errorf("--progress-format must be one of: %s", strings.Join([]string{downloadProgressFormatText, downloadProgressFormatJSONL}, ", "))
+	}
+	if workers < 1 {
+		return downloadResultsSpec{}, errors.New("--workers must be at least 1")
 	}
 	if name != nil && runDir != nil {
 		return downloadResultsSpec{}, errors.New("--name and --run-dir are mutually exclusive")
@@ -440,6 +454,7 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 		WorkspaceID:         workspaceID,
 		PollIntervalSeconds: pollIntervalSeconds,
 		ProgressFormat:      progressFormat,
+		Workers:             workers,
 		Verbose:             cmd.Bool("verbose"),
 	}, nil
 }
@@ -456,7 +471,7 @@ func (e *downloadResultsEngine) download(ctx context.Context, spec downloadResul
 			return "", err
 		}
 	default:
-		if err := e.waitForPipeline(ctx, runDir, &metadata, spec.PollIntervalSeconds); err != nil {
+		if err := e.waitForPipeline(ctx, runDir, &metadata, spec.PollIntervalSeconds, spec.Workers); err != nil {
 			return "", err
 		}
 	}
@@ -976,7 +991,7 @@ func (e *downloadResultsEngine) waitForPrediction(ctx context.Context, runDir st
 	}
 }
 
-func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir string, metadata *downloadRunMetadata, pollIntervalSeconds float64) error {
+func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir string, metadata *downloadRunMetadata, pollIntervalSeconds float64, workers int) error {
 	runID := derefString(metadata.Remote.RunID)
 	if runID == "" {
 		return fmt.Errorf("Run %s has no confirmed remote run ID", runDir)
@@ -1004,7 +1019,7 @@ func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir stri
 		madeProgress := false
 		for {
 			if metadata.Pending != nil && metadata.Pending.Kind == downloadPendingKindResultPage {
-				if err := e.drainPendingPipelinePage(ctx, runDir, metadata, manifest); err != nil {
+				if err := e.drainPendingPipelinePage(ctx, runDir, metadata, manifest, workers); err != nil {
 					return err
 				}
 				madeProgress = true
@@ -1080,7 +1095,7 @@ func (e *downloadResultsEngine) discoverNextPipelinePage(ctx context.Context, ru
 	return true, nil
 }
 
-func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender) error {
+func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, runDir string, metadata *downloadRunMetadata, manifest *pipelineResultManifestAppender, workers int) error {
 	if metadata.Pending == nil || metadata.Pending.Kind != downloadPendingKindResultPage {
 		return errors.New("Pipeline metadata does not contain a pending page")
 	}
@@ -1098,39 +1113,152 @@ func (e *downloadResultsEngine) drainPendingPipelinePage(ctx context.Context, ru
 		results[result.ID] = result
 	}
 
-	for len(metadata.Pending.ResultIDs) > 0 {
-		resultID := metadata.Pending.ResultIDs[0]
+	pendingResults := make([]downloadPipelineResultInfo, 0, len(metadata.Pending.ResultIDs))
+	for _, resultID := range metadata.Pending.ResultIDs {
 		result, ok := results[resultID]
 		if !ok {
 			return fmt.Errorf("Unable to resume result page; result %s is no longer present", resultID)
 		}
+		pendingResults = append(pendingResults, result)
+	}
 
-		resultDir := filepath.Join(runDir, "results", result.ID)
-		archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
-		if err != nil {
+	materialized, materializeErr := e.materializePendingPipelineResults(ctx, runDir, metadata, pendingResults, workers)
+	completedIDs := make(map[string]struct{}, len(materialized))
+	for _, result := range materialized {
+		if err := manifest.appendResult(result.resultDir, result.resultID); err != nil {
 			return err
 		}
-		if err := savePipelineResultMetadata(resultDir, result); err != nil {
-			return err
-		}
-		if !isDownloadMaterialized(archivePath, extractedDir) {
-			if err := e.materializeArchive(ctx, runDir, metadata, result.ArchiveURL, archivePath, extractedDir, map[string]any{"result_id": result.ID}); err != nil {
-				return err
-			}
-		}
-		if err := manifest.appendResult(resultDir, result.ID); err != nil {
-			return err
-		}
+		completedIDs[result.resultID] = struct{}{}
+	}
 
-		metadata.Pending.ResultIDs = metadata.Pending.ResultIDs[1:]
+	if len(completedIDs) > 0 {
+		metadata.Pending.ResultIDs = filterPendingResultIDs(metadata.Pending.ResultIDs, completedIDs)
 		if err := saveDownloadMetadata(runDir, *metadata); err != nil {
 			return err
 		}
 	}
 
+	if materializeErr != nil {
+		return materializeErr
+	}
+
 	metadata.CursorAfterID = cloneString(metadata.Pending.PageLastID)
 	metadata.Pending = nil
 	return saveDownloadMetadata(runDir, *metadata)
+}
+
+type materializedPipelineResult struct {
+	resultID  string
+	resultDir string
+}
+
+type pipelineResultMaterialization struct {
+	result materializedPipelineResult
+	err    error
+}
+
+func (e *downloadResultsEngine) materializePendingPipelineResults(ctx context.Context, runDir string, metadata *downloadRunMetadata, results []downloadPipelineResultInfo, workers int) ([]materializedPipelineResult, error) {
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	workerCount := normalizeDownloadWorkerCount(workers, len(results))
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan downloadPipelineResultInfo)
+	done := make(chan pipelineResultMaterialization, len(results))
+	var wg sync.WaitGroup
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for result := range jobs {
+				materialized, err := e.materializePipelineResultArchive(workerCtx, runDir, metadata, result)
+				done <- pipelineResultMaterialization{result: materialized, err: err}
+				if err != nil {
+					cancel()
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, result := range results {
+			select {
+			case <-workerCtx.Done():
+				return
+			case jobs <- result:
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	materializedByID := make(map[string]materializedPipelineResult, len(results))
+	var firstErr error
+	for result := range done {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+				cancel()
+			}
+			continue
+		}
+		materializedByID[result.result.resultID] = result.result
+	}
+
+	materialized := make([]materializedPipelineResult, 0, len(materializedByID))
+	for _, result := range results {
+		if materializedResult, ok := materializedByID[result.ID]; ok {
+			materialized = append(materialized, materializedResult)
+		}
+	}
+
+	return materialized, firstErr
+}
+
+func (e *downloadResultsEngine) materializePipelineResultArchive(ctx context.Context, runDir string, metadata *downloadRunMetadata, result downloadPipelineResultInfo) (materializedPipelineResult, error) {
+	resultDir := filepath.Join(runDir, "results", result.ID)
+	archivePath, extractedDir, err := materializationPaths(resultDir, result.ArchiveURL)
+	if err != nil {
+		return materializedPipelineResult{}, err
+	}
+	if err := savePipelineResultMetadata(resultDir, result); err != nil {
+		return materializedPipelineResult{}, err
+	}
+	if !isDownloadMaterialized(archivePath, extractedDir) {
+		if err := e.materializeArchive(ctx, runDir, metadata, result.ArchiveURL, archivePath, extractedDir, map[string]any{"result_id": result.ID}); err != nil {
+			return materializedPipelineResult{}, err
+		}
+	}
+	return materializedPipelineResult{resultID: result.ID, resultDir: resultDir}, nil
+}
+
+func normalizeDownloadWorkerCount(workers int, jobs int) int {
+	if workers < 1 {
+		workers = 1
+	}
+	if jobs > 0 && workers > jobs {
+		return jobs
+	}
+	return workers
+}
+
+func filterPendingResultIDs(resultIDs []string, completedIDs map[string]struct{}) []string {
+	remaining := resultIDs[:0]
+	for _, resultID := range resultIDs {
+		if _, ok := completedIDs[resultID]; ok {
+			continue
+		}
+		remaining = append(remaining, resultID)
+	}
+	return remaining
 }
 
 func (e *downloadResultsEngine) materializeArchive(ctx context.Context, runDir string, metadata *downloadRunMetadata, archiveURL string, archivePath string, extractedDir string, details map[string]any) error {
@@ -1765,6 +1893,8 @@ func pipelineRunningSummary(latestResultID *string) string {
 }
 
 func (s *downloadResultsSink) info(event string, message string, runDir string, metadata *downloadRunMetadata, details map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.progressFormat == downloadProgressFormatJSONL {
 		s.writeJSONL(event, message, runDir, metadata, details)
 		return
@@ -1780,10 +1910,13 @@ func (s *downloadResultsSink) maybeRunningSummary(event string, message string, 
 		return
 	}
 	now := time.Now()
+	s.mu.Lock()
 	if !s.lastRunningSummaryAt.IsZero() && now.Sub(s.lastRunningSummaryAt) < downloadResultsSummaryIntervalSec {
+		s.mu.Unlock()
 		return
 	}
 	s.lastRunningSummaryAt = now
+	s.mu.Unlock()
 	s.info(event, message, runDir, metadata, details)
 }
 
