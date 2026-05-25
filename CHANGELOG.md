@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.21.0 (2026-05-25)
+
+Full Changelog: [v0.20.0...v0.21.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.20.0...v0.21.0)
+
+### Features
+
+* **compute-api:** add small molecule structure templates ([73a7ad4](https://github.com/boltz-bio/boltz-api-cli/commit/73a7ad4f1946d97f2a50ed6e24a4cee87acd7cfc))
+
 ## 0.20.0 (2026-05-23)
 
 Full Changelog: [v0.19.1...v0.20.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.19.1...v0.20.0)
