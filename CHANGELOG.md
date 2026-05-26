@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.1 (2026-05-26)
+
+Full Changelog: [v0.22.0...v0.22.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.22.0...v0.22.1)
+
+### Bug Fixes
+
+* **compute-api:** gate pocket conditioning schemas ([3243c7c](https://github.com/boltz-bio/boltz-api-cli/commit/3243c7cb2168380f2205b27370df08fe6f926d1b))
+
 ## 0.22.0 (2026-05-26)
 
 Full Changelog: [v0.21.0...v0.22.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.21.0...v0.22.0)
