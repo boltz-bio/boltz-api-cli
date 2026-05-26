@@ -57,7 +57,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "estimate-cost",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{format: cif, source: {type: url, url: https://example.com}, chain_id: string, force: true, template_id: string, threshold: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -79,6 +79,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}",
 			"--input.num-samples", "1",
+			"--input.templates", "[{format: cif, source: {type: url, url: https://example.com}, chain_id: string, force: true, template_id: string, threshold: 0}]",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -129,6 +130,15 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"    sampling_steps: 1\n" +
 			"    step_scale: 1.3\n" +
 			"  num_samples: 1\n" +
+			"  templates:\n" +
+			"    - format: cif\n" +
+			"      source:\n" +
+			"        type: url\n" +
+			"        url: https://example.com\n" +
+			"      chain_id: string\n" +
+			"      force: true\n" +
+			"      template_id: string\n" +
+			"      threshold: 0\n" +
 			"model: boltz-2.1\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")
@@ -147,7 +157,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "start",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{format: cif, source: {type: url, url: https://example.com}, chain_id: string, force: true, template_id: string, threshold: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -169,6 +179,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}",
 			"--input.num-samples", "1",
+			"--input.templates", "[{format: cif, source: {type: url, url: https://example.com}, chain_id: string, force: true, template_id: string, threshold: 0}]",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -219,6 +230,15 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"    sampling_steps: 1\n" +
 			"    step_scale: 1.3\n" +
 			"  num_samples: 1\n" +
+			"  templates:\n" +
+			"    - format: cif\n" +
+			"      source:\n" +
+			"        type: url\n" +
+			"        url: https://example.com\n" +
+			"      chain_id: string\n" +
+			"      force: true\n" +
+			"      template_id: string\n" +
+			"      threshold: 0\n" +
 			"model: boltz-2.1\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")
