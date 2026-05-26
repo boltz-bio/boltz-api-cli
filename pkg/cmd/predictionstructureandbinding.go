@@ -144,6 +144,11 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 			Usage:      "Number of structure samples to generate",
 			InnerField: "num_samples",
 		},
+		&requestflag.InnerFlag[[]map[string]any]{
+			Name:       "input.templates",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads.",
+			InnerField: "templates",
+		},
 	},
 })
 
@@ -206,6 +211,11 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 			Name:       "input.num-samples",
 			Usage:      "Number of structure samples to generate",
 			InnerField: "num_samples",
+		},
+		&requestflag.InnerFlag[[]map[string]any]{
+			Name:       "input.templates",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads.",
+			InnerField: "templates",
 		},
 	},
 })
