@@ -148,11 +148,6 @@ var smallMoleculeLibraryScreenEstimateCost = requestflag.WithInnerFlags(cli.Comm
 			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
 			InnerField: "constraints",
 		},
-		&requestflag.InnerFlag[bool]{
-			Name:       "target.enable-pocket-conditioning",
-			Usage:      "When true, pocket_residues are also sent as a forced Boltz2 pocket constraint while scoring candidate molecules. Defaults to false.",
-			InnerField: "enable_pocket_conditioning",
-		},
 		&requestflag.InnerFlag[map[string]any]{
 			Name:       "target.pocket-residues",
 			Usage:      `Binding pocket residues, keyed by chain ID. Each key is a chain ID (e.g. "A") and the value is an array of 0-indexed residue indices that define the binding pocket on that chain. When provided, these residues guide pocket extraction and add a derived pocket constraint during affinity predictions. That derived constraint remains separate from any explicit pocket constraints in target.constraints. When omitted, the model auto-detects the pocket.`,
@@ -286,11 +281,6 @@ var smallMoleculeLibraryScreenStart = requestflag.WithInnerFlags(cli.Command{
 			Name:       "target.constraints",
 			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
 			InnerField: "constraints",
-		},
-		&requestflag.InnerFlag[bool]{
-			Name:       "target.enable-pocket-conditioning",
-			Usage:      "When true, pocket_residues are also sent as a forced Boltz2 pocket constraint while scoring candidate molecules. Defaults to false.",
-			InnerField: "enable_pocket_conditioning",
 		},
 		&requestflag.InnerFlag[map[string]any]{
 			Name:       "target.pocket-residues",
