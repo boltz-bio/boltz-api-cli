@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.0 (2026-05-26)
+
+Full Changelog: [v0.21.0...v0.22.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.21.0...v0.22.0)
+
+### Features
+
+* **compute-api:** add protein redesign endpoint ([edb16f6](https://github.com/boltz-bio/boltz-api-cli/commit/edb16f6ae8c2ea51bd095136c48fca148e90148a))
+
 ## 0.21.0 (2026-05-25)
 
 Full Changelog: [v0.20.0...v0.21.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.20.0...v0.21.0)
