@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.0 (2026-05-26)
+
+Full Changelog: [v0.22.1...v0.23.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.22.1...v0.23.0)
+
+### Features
+
+* Add Boltz2 templates to compute API ([8c84328](https://github.com/boltz-bio/boltz-api-cli/commit/8c843284038fbed9d1be9f4ab2d61c657c16b6fe))
+
 ## 0.22.1 (2026-05-26)
 
 Full Changelog: [v0.22.0...v0.22.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.22.0...v0.22.1)
