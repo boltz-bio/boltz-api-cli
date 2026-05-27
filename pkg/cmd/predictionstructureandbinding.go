@@ -146,7 +146,7 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.templates",
-			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads.",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use chain_id and template_id to map request chains to template chains when the IDs differ or when providing multi-chain templates.",
 			InnerField: "templates",
 		},
 	},
@@ -154,7 +154,7 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 
 var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command{
 	Name:    "start",
-	Usage:   "Submit a prediction job that produces 3D structure coordinates and confidence\nscores for the input molecular complex, with optional binding metrics.",
+	Usage:   "Submit a prediction job that produces 3D structure coordinates and confidence\nscores for the input molecular complex, with optional binding metrics. Protein\nentities can use automatic MSA generation, custom A3M/CSV MSAs, or empty MSA\nmode. Boltz-2.1 predictions can also include up to 4 CIF or PDB templates to\nguide protein-chain geometry.",
 	Suggest: true,
 	Flags: []cli.Flag{
 		&requestflag.Flag[map[string]any]{
@@ -214,7 +214,7 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.templates",
-			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads.",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use chain_id and template_id to map request chains to template chains when the IDs differ or when providing multi-chain templates.",
 			InnerField: "templates",
 		},
 	},
