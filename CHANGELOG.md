@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.0 (2026-05-27)
+
+Full Changelog: [v0.23.0...v0.24.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.23.0...v0.24.0)
+
+### Features
+
+* [codex] Add custom MSA support to structure predictions ([f977e8c](https://github.com/boltz-bio/boltz-api-cli/commit/f977e8c741d7e9b0200eb07a8a522a2ec28913ad))
+
 ## 0.23.0 (2026-05-26)
 
 Full Changelog: [v0.22.1...v0.23.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.22.1...v0.23.0)
