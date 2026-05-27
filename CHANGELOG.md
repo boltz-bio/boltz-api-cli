@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.24.1 (2026-05-27)
+
+Full Changelog: [v0.24.0...v0.24.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.24.0...v0.24.1)
+
+### Documentation
+
+* document structure templates and custom MSA ([187a7db](https://github.com/boltz-bio/boltz-api-cli/commit/187a7db274fafea9a78b2562daea7467df35a191))
+
 ## 0.24.0 (2026-05-27)
 
 Full Changelog: [v0.23.0...v0.24.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.23.0...v0.24.0)
