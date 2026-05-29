@@ -38,11 +38,11 @@ default retry count and delay.
 For reproducible installs, pin a version:
 
 ```sh
-curl -fsSL https://install.boltz.bio/boltz-api/install.sh | BOLTZ_API_VERSION=0.24.2 sh
+curl -fsSL https://install.boltz.bio/boltz-api/install.sh | BOLTZ_API_VERSION=0.24.3 sh
 ```
 
 ```powershell
-$env:BOLTZ_API_VERSION = "0.24.2"; irm https://install.boltz.bio/boltz-api/install.ps1 | iex
+$env:BOLTZ_API_VERSION = "0.24.3"; irm https://install.boltz.bio/boltz-api/install.ps1 | iex
 ```
 
 ### Installing with Go
