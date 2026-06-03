@@ -129,3 +129,101 @@ func parsedTestCommand(t *testing.T, args ...string) *cli.Command {
 	require.NotNil(t, captured)
 	return captured
 }
+
+func TestRequestOptionsSetClientHeader(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{SelectedOrg: "org-config"}))
+	t.Setenv("BOLTZ_API_CLIENT", "claude-desktop-mcp")
+
+	var gotClient string
+	var gotClientVersion string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClient = r.Header.Get("X-Boltz-Client")
+		gotClientVersion = r.Header.Get("X-Boltz-Client-Version")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	cmd := parsedTestCommand(t,
+		"--base-url", server.URL,
+		"--api-key", "api-key-123",
+		"call",
+	)
+
+	client := githubcomboltzbioboltzcomputeapigo.NewClient(getDefaultRequestOptions(cmd)...)
+	var result map[string]any
+	require.NoError(t, client.Get(context.Background(), "/check", nil, &result))
+	require.Equal(t, "claude-desktop-mcp", gotClient)
+	require.Equal(t, Version, gotClientVersion)
+}
+
+func TestDetectClientFromEnv(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		environ []string
+		want    string
+	}{
+		{
+			name: "explicit BOLTZ_API_CLIENT wins over host detection",
+			env:  map[string]string{"BOLTZ_API_CLIENT": "claude-desktop-mcp", "CLAUDECODE": "1"},
+			want: "claude-desktop-mcp",
+		},
+		{
+			name: "trims whitespace around explicit value",
+			env:  map[string]string{"BOLTZ_API_CLIENT": "  codex  "},
+			want: "codex",
+		},
+		{
+			name: "explicit value with allowed punctuation is accepted",
+			env:  map[string]string{"BOLTZ_API_CLIENT": "claude-desktop-mcp"},
+			want: "claude-desktop-mcp",
+		},
+		{
+			name: "malformed explicit value (control char) is ignored and falls through",
+			env:  map[string]string{"BOLTZ_API_CLIENT": "bad\nvalue"},
+			want: "boltz-cli",
+		},
+		{
+			name: "CLAUDECODE marks claude-code",
+			env:  map[string]string{"CLAUDECODE": "1"},
+			want: "claude-code",
+		},
+		{
+			name: "CLAUDE_CODE_ENTRYPOINT marks claude-code",
+			env:  map[string]string{"CLAUDE_CODE_ENTRYPOINT": "cli"},
+			want: "claude-code",
+		},
+		{
+			name:    "a CODEX_* var marks codex",
+			environ: []string{"CODEX_SANDBOX=seatbelt"},
+			want:    "codex",
+		},
+		{
+			name:    "a GEMINI_* var marks gemini",
+			environ: []string{"GEMINI_CLI=1"},
+			want:    "gemini",
+		},
+		{
+			name: "no signals falls back to boltz-cli",
+			want: "boltz-cli",
+		},
+		{
+			name:    "blank BOLTZ_API_CLIENT is ignored and falls through to host detection",
+			env:     map[string]string{"BOLTZ_API_CLIENT": "   "},
+			environ: []string{"CODEX_HOME=/home/.codex"},
+			want:    "codex",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			getenv := func(key string) string { return tc.env[key] }
+			if got := detectClientFromEnv(getenv, tc.environ); got != tc.want {
+				t.Fatalf("detectClientFromEnv() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
