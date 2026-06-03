@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.0 (2026-06-03)
+
+Full Changelog: [v0.24.3...v0.25.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.24.3...v0.25.0)
+
+### Features
+
+* send X-Boltz-Client header for usage attribution ([43dc1df](https://github.com/boltz-bio/boltz-api-cli/commit/43dc1df304f7d069aa68cf7c528848d74364c594))
+
 ## 0.24.3 (2026-05-29)
 
 Full Changelog: [v0.24.2...v0.24.3](https://github.com/boltz-bio/boltz-api-cli/compare/v0.24.2...v0.24.3)
