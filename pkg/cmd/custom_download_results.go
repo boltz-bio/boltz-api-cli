@@ -1310,6 +1310,9 @@ func (e *downloadResultsEngine) materializePipelineResultArchive(ctx context.Con
 			return materializedPipelineResult{}, err
 		}
 	}
+	if err := prefixPipelineResultStructureFile(resultDir, result.ID); err != nil {
+		return materializedPipelineResult{}, err
+	}
 	return materializedPipelineResult{resultID: result.ID, resultDir: resultDir}, nil
 }
 
@@ -1788,7 +1791,7 @@ func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string
 		}); metricsPath != "" {
 			paths["metrics"] = relativeDownloadPath(runDir, metricsPath)
 		}
-		if structurePath := findExtractedResultFile(extractedDir, []string{"result/predicted_structure.cif", "predicted_structure.cif"}, isStructureArtifactPath); structurePath != "" {
+		if structurePath := findExtractedResultFile(extractedDir, preferredStructureArtifactNames(filepath.Base(resultDir)), isStructureArtifactPath); structurePath != "" {
 			paths["structure"] = relativeDownloadPath(runDir, structurePath)
 		}
 		if paePath := findExtractedResultFile(extractedDir, []string{"result/pae.npz", "pae.npz"}, func(path string) bool {
@@ -1798,6 +1801,54 @@ func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string
 		}
 	}
 	return paths
+}
+
+func prefixPipelineResultStructureFile(resultDir string, resultID string) error {
+	extractedDir := filepath.Join(resultDir, "files")
+	if info, err := os.Stat(extractedDir); err != nil || !info.IsDir() {
+		return err
+	}
+
+	structurePath := findExtractedResultFile(extractedDir, preferredStructureArtifactNames(resultID), isStructureArtifactPath)
+	if structurePath == "" {
+		return nil
+	}
+
+	prefixedName := prefixedStructureArtifactName(resultID, structurePath)
+	if filepath.Base(structurePath) == prefixedName {
+		return nil
+	}
+
+	prefixedPath := filepath.Join(filepath.Dir(structurePath), prefixedName)
+	if _, err := os.Stat(prefixedPath); err == nil {
+		return nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Rename(structurePath, prefixedPath)
+}
+
+func preferredStructureArtifactNames(resultID string) []string {
+	return []string{
+		path.Join("result", prefixedStructureArtifactNameWithExt(resultID, ".cif")),
+		prefixedStructureArtifactNameWithExt(resultID, ".cif"),
+		path.Join("result", prefixedStructureArtifactNameWithExt(resultID, ".pdb")),
+		prefixedStructureArtifactNameWithExt(resultID, ".pdb"),
+		"result/predicted_structure.cif",
+		"predicted_structure.cif",
+	}
+}
+
+func prefixedStructureArtifactName(resultID string, structurePath string) string {
+	extension := strings.ToLower(filepath.Ext(structurePath))
+	if extension != ".pdb" {
+		extension = ".cif"
+	}
+	return prefixedStructureArtifactNameWithExt(resultID, extension)
+}
+
+func prefixedStructureArtifactNameWithExt(resultID string, extension string) string {
+	return resultID + "_predicted" + extension
 }
 
 func findPipelineResultArchive(resultDir string) string {
