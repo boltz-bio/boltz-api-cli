@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.26.1 (2026-06-04)
+
+Full Changelog: [v0.26.0...v0.26.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.26.0...v0.26.1)
+
+### Bug Fixes
+
+* **download-results:** prefix structures with result IDs ([b3a7b1d](https://github.com/boltz-bio/boltz-api-cli/commit/b3a7b1d1c1b1437c0ff978ea1b5f9f264bf7ad47))
+
 ## 0.26.0 (2026-06-04)
 
 Full Changelog: [v0.25.0...v0.26.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.25.0...v0.26.0)
