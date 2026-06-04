@@ -582,9 +582,12 @@ func TestPipelineDownloadResultsHappyPathAllRunTypes(t *testing.T) {
 			assert.NotEmpty(t, stderr)
 			assert.FileExists(t, filepath.Join(runDir, "results", "res_1", "archive.tar.gz"))
 			assert.FileExists(t, filepath.Join(runDir, "results", "res_1", "files", "result.txt"))
+			assert.FileExists(t, filepath.Join(runDir, "results", "res_1", "files", "result", "res_1_predicted.cif"))
+			assert.NoFileExists(t, filepath.Join(runDir, "results", "res_1", "files", "result", "predicted_structure.cif"))
 			assert.FileExists(t, filepath.Join(runDir, "results", "res_1", "metadata.json"))
 			assert.FileExists(t, filepath.Join(runDir, "results", "res_2", "archive.tar.gz"))
 			assert.FileExists(t, filepath.Join(runDir, "results", "res_2", "files", "result.txt"))
+			assert.FileExists(t, filepath.Join(runDir, "results", "res_2", "files", "result", "res_2_predicted.cif"))
 			assert.FileExists(t, filepath.Join(runDir, "run.json"))
 
 			metadata := readDownloadResultsTestJSON(t, filepath.Join(runDir, "results", "res_1", "metadata.json"))
@@ -603,7 +606,7 @@ func TestPipelineDownloadResultsHappyPathAllRunTypes(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, "results/res_1/archive.tar.gz", paths["archive"])
 			assert.Equal(t, "results/res_1/files/result/metrics.json", paths["metrics"])
-			assert.Equal(t, "results/res_1/files/result/predicted_structure.cif", paths["structure"])
+			assert.Equal(t, "results/res_1/files/result/res_1_predicted.cif", paths["structure"])
 			assert.Equal(t, "results/res_1/files/result/pae.npz", paths["pae"])
 		})
 	}
