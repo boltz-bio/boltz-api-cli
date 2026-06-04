@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.26.0 (2026-06-04)
+
+Full Changelog: [v0.25.0...v0.26.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.25.0...v0.26.0)
+
+### Features
+
+* **compute-api:** abort generative pipelines when filter+dedup rate exceeds 95% ([213416e](https://github.com/boltz-bio/boltz-api-cli/commit/213416e97a59d836f3311ff8d035d69678a65be1))
+
 ## 0.25.0 (2026-06-03)
 
 Full Changelog: [v0.24.3...v0.25.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.24.3...v0.25.0)
