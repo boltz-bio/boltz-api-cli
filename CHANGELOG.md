@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.28.0 (2026-06-05)
+
+Full Changelog: [v0.27.1...v0.28.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.27.1...v0.28.0)
+
+### Features
+
+* **lab:** reuse precomputed small molecule pockets ([0edff74](https://github.com/boltz-bio/boltz-api-cli/commit/0edff74423b0ad2154d176f6016c808663d8b1d8))
+
 ## 0.27.1 (2026-06-05)
 
 Full Changelog: [v0.27.0...v0.27.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.27.0...v0.27.1)
