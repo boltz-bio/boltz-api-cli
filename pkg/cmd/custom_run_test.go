@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -265,6 +266,38 @@ func TestRunRejectsExistingMetadataBeforeStartingRemoteRun(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already contains .boltz-run.json")
+	assert.Empty(t, stdout)
+	assert.Empty(t, stderr)
+	assert.Equal(t, 0, startRequests)
+}
+
+func TestRunValidatesDeterministicRootDirBeforeStartingRemoteRun(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	badRoot := filepath.Join(cwd, "not-a-dir")
+	require.NoError(t, os.WriteFile(badRoot, []byte("file"), 0o644))
+
+	startRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startRequests++
+		http.Error(w, "should not start", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	stdout, stderr, err := runRunCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"predictions:adme",
+		"run",
+		"--input.molecules", "[{smiles: CCO}]",
+		"--model", "adme-v1",
+		"--root-dir", badRoot,
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Run root path is not a directory")
 	assert.Empty(t, stdout)
 	assert.Empty(t, stderr)
 	assert.Equal(t, 0, startRequests)

@@ -320,7 +320,7 @@ func parseRunCommandOptions(cmd *cli.Command, kind runResourceKind) (runCommandO
 
 func ensureRunLocalTargetAvailable(options runCommandOptions) error {
 	if options.Name == nil && options.RunDir == nil {
-		return nil
+		return ensureRunRootDirAvailable(options.RootDir)
 	}
 
 	runDir, err := resolveDownloadRunDir(downloadResultsSpec{
@@ -344,6 +344,24 @@ func ensureRunLocalTargetAvailable(options runCommandOptions) error {
 		return err
 	}
 	return nil
+}
+
+func ensureRunRootDirAvailable(rootDir string) error {
+	resolvedRootDir, err := resolveDownloadRootDir(rootDir)
+	if err != nil {
+		return err
+	}
+
+	if info, err := os.Stat(resolvedRootDir); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("Run root path is not a directory: %s", resolvedRootDir)
+		}
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return os.MkdirAll(resolvedRootDir, 0o755)
 }
 
 func parseStartedRemoteRun(raw []byte, spec runResourceSpec) (startedRemoteRun, error) {
