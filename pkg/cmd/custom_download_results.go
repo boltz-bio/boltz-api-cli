@@ -51,6 +51,7 @@ var (
 		prefix  string
 		runType downloadRunType
 	}{
+		{prefix: "adme_pred_", runType: downloadRunTypeAdme},
 		// Structure predictions now use the sab_pred prefix; keep pred_ as a legacy alias.
 		{prefix: "sab_pred_", runType: downloadRunTypePrediction},
 		{prefix: "pred_", runType: downloadRunTypePrediction},
@@ -127,6 +128,7 @@ var downloadResultsCommand = &cli.Command{
 type downloadRunType string
 
 const (
+	downloadRunTypeAdme                  downloadRunType = "adme"
 	downloadRunTypePrediction            downloadRunType = "prediction"
 	downloadRunTypeProteinDesign         downloadRunType = "protein_design"
 	downloadRunTypeProteinLibraryScreen  downloadRunType = "protein_library_screen"
@@ -460,7 +462,7 @@ func parseDownloadResultsSpec(cmd *cli.Command) (downloadResultsSpec, error) {
 		if err != nil {
 			return downloadResultsSpec{}, err
 		}
-		if runType == downloadRunTypePrediction && downloadMode != downloadModeEverything {
+		if !isPipelineDownloadRunType(runType) && downloadMode != downloadModeEverything {
 			return downloadResultsSpec{}, errors.New("--download-mode only supports pipeline run IDs")
 		}
 	}
@@ -489,6 +491,10 @@ func (e *downloadResultsEngine) download(ctx context.Context, spec downloadResul
 	switch metadata.RunType {
 	case downloadRunTypePrediction:
 		if err := e.waitForPrediction(ctx, runDir, &metadata, spec.PollIntervalSeconds); err != nil {
+			return "", err
+		}
+	case downloadRunTypeAdme:
+		if err := e.waitForAdmePrediction(ctx, runDir, &metadata, spec.PollIntervalSeconds); err != nil {
 			return "", err
 		}
 	default:
@@ -784,8 +790,8 @@ func reconcileMetadataWithSpec(runDir string, metadata *downloadRunMetadata, spe
 		if metadata.RunType != inferredType {
 			return fmt.Errorf("Run directory %s belongs to %s, not %s", runDir, metadata.RunType, inferredType)
 		}
-		if metadata.RunType == downloadRunTypePrediction && metadata.DownloadMode != downloadModeEverything {
-			return fmt.Errorf("Run directory %s belongs to a prediction and cannot use download mode %s", runDir, metadata.DownloadMode)
+		if !isPipelineDownloadRunType(metadata.RunType) && metadata.DownloadMode != downloadModeEverything {
+			return fmt.Errorf("Run directory %s belongs to %s and cannot use download mode %s", runDir, metadata.RunType, metadata.DownloadMode)
 		}
 	}
 	if spec.WorkspaceID != nil {
@@ -942,9 +948,13 @@ func downloadMetadataPath(runDir string) string {
 }
 
 func isSupportedDownloadRunType(runType downloadRunType) bool {
-	if runType == downloadRunTypePrediction {
+	if runType == downloadRunTypePrediction || runType == downloadRunTypeAdme {
 		return true
 	}
+	return isPipelineDownloadRunType(runType)
+}
+
+func isPipelineDownloadRunType(runType downloadRunType) bool {
 	_, ok := downloadPipelineAdapters[runType]
 	return ok
 }
@@ -1027,6 +1037,50 @@ func (e *downloadResultsEngine) waitForPrediction(ctx context.Context, runDir st
 			return nil
 		default:
 			return fmt.Errorf("Unsupported prediction status %q", response.Status)
+		}
+	}
+}
+
+func (e *downloadResultsEngine) waitForAdmePrediction(ctx context.Context, runDir string, metadata *downloadRunMetadata, pollIntervalSeconds float64) error {
+	runID := derefString(metadata.Remote.RunID)
+	if runID == "" {
+		return fmt.Errorf("Run %s has no confirmed remote run ID", runDir)
+	}
+	e.sink.info("waiting", fmt.Sprintf("Waiting for ADME prediction in %s", runDir), runDir, metadata, nil)
+
+	for {
+		response, err := e.getAdmePrediction(ctx, runID, metadata.Remote.WorkspaceID)
+		if err != nil {
+			return err
+		}
+		previousStatus := derefString(metadata.Remote.Status)
+		updateRunMetadata(metadata, response.Status, response.WorkspaceID, response.StartedAt, response.CompletedAt, nil, nil, response.ErrorCode)
+		if err := saveDownloadMetadata(runDir, *metadata); err != nil {
+			return err
+		}
+		if err := saveDownloadRunMetadata(runDir, response.Run); err != nil {
+			return err
+		}
+		if response.Status != previousStatus {
+			e.sink.info("status", fmt.Sprintf("ADME prediction status: %s", response.Status), runDir, metadata, nil)
+		}
+
+		switch response.Status {
+		case "pending", "running":
+			e.sink.maybeRunningSummary("running", "ADME prediction still running...", runDir, metadata, nil)
+			if err := sleepWithContext(ctx, pollIntervalSeconds); err != nil {
+				return err
+			}
+			continue
+		case "failed":
+			failed := failureForMetadata(*metadata)
+			e.sink.info("failed", failed.Error(), runDir, metadata, nil)
+			return failed
+		case "succeeded":
+			e.sink.info("ready", fmt.Sprintf("ADME prediction ready in %s", runDir), runDir, metadata, nil)
+			return nil
+		default:
+			return fmt.Errorf("Unsupported ADME prediction status %q", response.Status)
 		}
 	}
 }
@@ -2140,6 +2194,23 @@ func (e *downloadResultsEngine) getPrediction(ctx context.Context, runID string,
 		CompletedAt: normalizedTimePointer(response.CompletedAt),
 		ErrorCode:   normalizedStringPointer(response.Error.Code),
 		ArchiveURL:  normalizedStringPointer(response.Output.Archive.URL),
+		Run:         sanitizedDownloadJSONMap(response.RawJSON(), response.ID),
+	}, nil
+}
+
+func (e *downloadResultsEngine) getAdmePrediction(ctx context.Context, runID string, workspaceID *string) (downloadPredictionRunInfo, error) {
+	params := boltzapi.PredictionAdmeGetParams{}
+	setOptionalStringOpt(&params.WorkspaceID, workspaceID)
+	response, err := e.client.Predictions.Adme.Get(ctx, runID, params)
+	if err != nil {
+		return downloadPredictionRunInfo{}, err
+	}
+	return downloadPredictionRunInfo{
+		Status:      string(response.Status),
+		WorkspaceID: normalizedStringPointer(response.WorkspaceID),
+		StartedAt:   normalizedTimePointer(response.StartedAt),
+		CompletedAt: normalizedTimePointer(response.CompletedAt),
+		ErrorCode:   normalizedStringPointer(response.Error.Code),
 		Run:         sanitizedDownloadJSONMap(response.RawJSON(), response.ID),
 	}, nil
 }

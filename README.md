@@ -246,6 +246,10 @@ Refresh tokens are stored in the OS keychain when available, with a fallback to:
 
 ### Local download helpers
 
+Resource `run` commands start a remote job, wait for completion, and write the local run directory path to stdout.
+They accept the same request flags as `start`, plus local output flags such as `--name`, `--run-dir`, `--root-dir`,
+`--poll-interval-seconds`, and `--progress-format`. Pipeline resources also accept `--download-mode` and `--workers`.
+
 `download-results` creates or resumes a local run directory under `boltz-experiments/` and checkpoints progress in `.boltz-run.json`.
 When `--name` and `--run-dir` are omitted, the run ID maps to a deterministic readable name such as
 `boltz-experiments/lucid-atom-checks-2f7148`, so repeated downloads for the same remote run resume in the same directory.
@@ -260,6 +264,9 @@ Structure prediction run IDs now use the `sab_pred` prefix. Historical `pred_` I
 Examples:
 
 ```sh
+boltz-api predictions:structure-and-binding run --input @json://prediction-input.json --name example-prediction
+boltz-api predictions:adme run --input @json://adme-input.json --name adme-run
+boltz-api protein:design run --input @json://protein-design-input.json --name protein-run
 boltz-api download-results --id sab_pred_123
 boltz-api download-results --id sab_pred_123 --name example-run
 boltz-api download-results --name example-run
