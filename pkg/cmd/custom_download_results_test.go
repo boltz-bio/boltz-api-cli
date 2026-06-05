@@ -199,6 +199,12 @@ func TestInferDownloadRunTypeSupportsStructurePredictionPrefixes(t *testing.T) {
 	}
 }
 
+func TestInferDownloadRunTypeSupportsAdmePredictionPrefix(t *testing.T) {
+	runType, err := inferDownloadRunType("adme_pred_123")
+	require.NoError(t, err)
+	assert.Equal(t, downloadRunTypeAdme, runType)
+}
+
 func TestDeterministicDownloadRunNameIsStable(t *testing.T) {
 	assert.Equal(t, "clear-pocket-screens-a8d3cc", deterministicDownloadRunName("pred_123"))
 }
