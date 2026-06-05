@@ -1681,7 +1681,7 @@ func (m *pipelineResultManifestAppender) appendEntry(entry map[string]any) error
 		return err
 	}
 	m.knownIDs[id] = struct{}{}
-	return nil
+	return writeDownloadCSVFromJSONL(m.runDir)
 }
 
 func (m *pipelineResultManifestAppender) load() error {
@@ -1775,7 +1775,10 @@ func rebuildPipelineResultManifest(runDir string) error {
 		return fmt.Sprint(manifest[i]["id"]) < fmt.Sprint(manifest[j]["id"])
 	})
 
-	return writeDownloadJSONLFile(filepath.Join(resultsDir, downloadResultsResultIndexName), manifest)
+	if err := writeDownloadJSONLFile(filepath.Join(resultsDir, downloadResultsResultIndexName), manifest); err != nil {
+		return err
+	}
+	return writeDownloadCSVFromJSONL(runDir)
 }
 
 func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string {
