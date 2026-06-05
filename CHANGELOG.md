@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.27.1 (2026-06-05)
+
+Full Changelog: [v0.27.0...v0.27.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.27.0...v0.27.1)
+
+### Bug Fixes
+
+* **cli:** describe structure run input flag ([ec519f5](https://github.com/boltz-bio/boltz-api-cli/commit/ec519f52c7a444d9418a9dc06ee40d9e397751c0))
+
 ## 0.27.0 (2026-06-05)
 
 Full Changelog: [v0.26.1...v0.27.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.26.1...v0.27.0)
