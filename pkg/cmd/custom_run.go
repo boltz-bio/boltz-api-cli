@@ -49,6 +49,8 @@ type runCommandOptions struct {
 	Verbose             bool
 }
 
+const structureAndBindingRunInputUsage = "Structure and binding prediction input. Pass inline JSON/YAML, or use @json://... / @yaml://... for larger payload files. Include entities plus optional constraints, bonds, templates, binding settings, sample count, and model options. Keep --model, --idempotency-key, and --workspace-id as top-level flags."
+
 var runResourceSpecs = []runResourceSpec{
 	{
 		Path:    []string{"predictions:structure-and-binding"},
@@ -124,14 +126,42 @@ func addRunCommands(app *cli.Command) {
 }
 
 func newRunCommand(spec runResourceSpec, startCommand *cli.Command) *cli.Command {
+	flags := cloneCommandFlags(startCommand.Flags)
+	annotateRunInputFlags(spec, flags)
+
 	return &cli.Command{
 		Name:            "run",
 		Usage:           runCommandUsage(spec.Kind),
 		Suggest:         true,
-		Flags:           append(cloneCommandFlags(startCommand.Flags), runCommandFlags(spec.Kind)...),
+		Flags:           append(flags, runCommandFlags(spec.Kind)...),
 		Action:          func(ctx context.Context, cmd *cli.Command) error { return handleResourceRun(ctx, cmd, spec) },
 		HideHelpCommand: true,
 	}
+}
+
+func annotateRunInputFlags(spec runResourceSpec, flags []cli.Flag) {
+	if len(spec.Path) != 1 || spec.Path[0] != "predictions:structure-and-binding" {
+		return
+	}
+
+	inputFlag := findFlagInList(flags, "input")
+	if inputFlag == nil {
+		return
+	}
+
+	usage, ok := flagStringField(inputFlag, "Usage")
+	if ok && strings.TrimSpace(usage) == "" {
+		setFlagStringField(inputFlag, "Usage", structureAndBindingRunInputUsage)
+	}
+}
+
+func findFlagInList(flags []cli.Flag, name string) cli.Flag {
+	for _, flag := range flags {
+		if canonicalFlagName(flag) == name {
+			return flag
+		}
+	}
+	return nil
 }
 
 func runCommandUsage(kind runResourceKind) string {

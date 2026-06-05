@@ -25,13 +25,23 @@ func TestApplyCustomizationsAddsRunCommands(t *testing.T) {
 	ApplyCustomizations(Command)
 
 	testCases := []struct {
-		path       []string
-		pipeline   bool
-		innerFlags []string
+		path               []string
+		pipeline           bool
+		innerFlags         []string
+		inputUsageContains []string
 	}{
 		{
 			path:       []string{"predictions:structure-and-binding"},
 			innerFlags: []string{"input.entities", "input.num-samples"},
+			inputUsageContains: []string{
+				"Structure and binding prediction input",
+				"inline JSON/YAML",
+				"@yaml://",
+				"entities",
+				"templates",
+				"--model",
+				"--workspace-id",
+			},
 		},
 		{
 			path:       []string{"predictions:adme"},
@@ -83,6 +93,12 @@ func TestApplyCustomizationsAddsRunCommands(t *testing.T) {
 
 			for _, name := range testCase.innerFlags {
 				mustFindFlag(t, run, name)
+			}
+			if len(testCase.inputUsageContains) > 0 {
+				inputUsage := usageForFlag(t, mustFindFlag(t, run, "input"))
+				for _, expected := range testCase.inputUsageContains {
+					require.Contains(t, inputUsage, expected)
+				}
 			}
 			require.NoError(t, requestflag.CheckInnerFlags(*run))
 		})
