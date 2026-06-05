@@ -147,6 +147,11 @@ var smallMoleculeDesignEstimateCost = requestflag.WithInnerFlags(cli.Command{
 			Usage:      `Binding pocket residues, keyed by chain ID. Each key is a chain ID (e.g. "A") and the value is an array of 0-indexed residue indices that define the binding pocket on that chain. When provided, these residues guide pocket extraction and add a derived pocket constraint during affinity predictions. That derived constraint remains separate from any explicit pocket constraints in target.constraints. When omitted, the model auto-detects the pocket.`,
 			InnerField: "pocket_residues",
 		},
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "target.precomputed-affinity-pocket",
+			Usage:      "Precomputed affinity-pocket artifacts for this target. When provided, small-molecule design/screen pipelines reuse this pocket and skip Compute affinity pocket search.",
+			InnerField: "precomputed_affinity_pocket",
+		},
 		&requestflag.InnerFlag[[]string]{
 			Name:       "target.reference-ligands",
 			Usage:      "Reference ligands as SMILES strings that help the model identify the binding pocket. When omitted, a set of drug-like default ligands is used for pocket detection.",
@@ -274,6 +279,11 @@ var smallMoleculeDesignStart = requestflag.WithInnerFlags(cli.Command{
 			Name:       "target.pocket-residues",
 			Usage:      `Binding pocket residues, keyed by chain ID. Each key is a chain ID (e.g. "A") and the value is an array of 0-indexed residue indices that define the binding pocket on that chain. When provided, these residues guide pocket extraction and add a derived pocket constraint during affinity predictions. That derived constraint remains separate from any explicit pocket constraints in target.constraints. When omitted, the model auto-detects the pocket.`,
 			InnerField: "pocket_residues",
+		},
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "target.precomputed-affinity-pocket",
+			Usage:      "Precomputed affinity-pocket artifacts for this target. When provided, small-molecule design/screen pipelines reuse this pocket and skip Compute affinity pocket search.",
+			InnerField: "precomputed_affinity_pocket",
 		},
 		&requestflag.InnerFlag[[]string]{
 			Name:       "target.reference-ligands",
