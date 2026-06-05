@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.27.0 (2026-06-05)
+
+Full Changelog: [v0.26.1...v0.27.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.26.1...v0.27.0)
+
+### Features
+
+* **cli:** add blocking run commands ([be1994f](https://github.com/boltz-bio/boltz-api-cli/commit/be1994f16c0a871efe46b7efc4ac7b2317489cf4))
+
+
+### Bug Fixes
+
+* **cli:** validate run root before start ([11d7f52](https://github.com/boltz-bio/boltz-api-cli/commit/11d7f520e70da85a8f6651891d589953894d4f32))
+
 ## 0.26.1 (2026-06-04)
 
 Full Changelog: [v0.26.0...v0.26.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.26.0...v0.26.1)
