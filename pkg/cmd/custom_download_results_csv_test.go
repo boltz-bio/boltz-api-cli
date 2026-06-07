@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
+func TestGenerateSmallMoleculeSummaryFlattenAndDropKeys(t *testing.T) {
 	runDir := t.TempDir()
 	jsonlPath := filepath.Join(runDir, "results", downloadResultsResultIndexName)
 	require.NoError(t, os.MkdirAll(filepath.Dir(jsonlPath), 0o755))
@@ -22,7 +22,7 @@ func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
 		`{"id":"res_2","smiles":"CCN","created_at":"2026-06-07T19:48:55.852Z","adme":{"solubility":"low"},"metrics":{"iptm":0.78,"binding_confidence":0.42},"paths":{"archive":"results/res_2/archive.tar.gz"}}`,
 	})
 
-	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
+	require.NoError(t, generateSmallMoleculeSummary(runDir))
 
 	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
 
@@ -48,30 +48,26 @@ func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
 	assert.Equal(t, "CCN", rows[1]["smiles"])
 	assert.Equal(t, "0.42", rows[1]["metrics.binding_confidence"])
 
-	// Sanity: no paths.* leaked into the CSV.
 	for _, header := range headers {
 		assert.False(t, strings.HasPrefix(header, "paths."), "paths.* column should not appear: %s", header)
 	}
 }
 
-func TestWriteSmallMoleculeSummaryCSVRemovesStaleCSVWhenJSONLMissing(t *testing.T) {
+func TestGenerateSmallMoleculeSummaryRemovesStaleCSVWhenJSONLMissing(t *testing.T) {
 	runDir := t.TempDir()
 	csvPath := filepath.Join(runDir, "results", downloadResultsSummaryCSVName)
 	require.NoError(t, os.MkdirAll(filepath.Dir(csvPath), 0o755))
 	require.NoError(t, os.WriteFile(csvPath, []byte("id\nold\n"), 0o644))
 
-	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
+	require.NoError(t, generateSmallMoleculeSummary(runDir))
 
 	_, err := os.Stat(csvPath)
 	assert.True(t, os.IsNotExist(err), "expected stale summary.csv to be removed, got err=%v", err)
 }
 
-func TestWriteSmallMoleculeSummaryCSVNoopWhenNoResultsDir(t *testing.T) {
+func TestGenerateSmallMoleculeSummaryNoopWhenNoResultsDir(t *testing.T) {
 	runDir := t.TempDir()
-	// No results/ directory yet. The writer must not fail when there is
-	// nothing to derive from: appendEntry calls this before the directory has
-	// been populated on the very first row.
-	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
+	require.NoError(t, generateSmallMoleculeSummary(runDir))
 }
 
 func TestPipelineResultManifestAppenderWritesSummaryForSmallMolecule(t *testing.T) {
@@ -108,11 +104,97 @@ func TestPipelineResultManifestAppenderSkipsSummaryForProteinDesign(t *testing.T
 		},
 	}, "res_1"))
 
-	// JSONL is written for every pipeline...
 	assert.FileExists(t, filepath.Join(runDir, "results", downloadResultsResultIndexName))
-	// ...but the summary.csv is small-molecule only.
 	_, err := os.Stat(filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
 	assert.True(t, os.IsNotExist(err), "summary.csv should not be written for non-small-molecule runs")
+}
+
+func TestSummaryFastPathAppendsRecordWhenColumnsMatch(t *testing.T) {
+	runDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(runDir, "results"), 0o755))
+
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeSmallMoleculeDesign)
+	require.NoError(t, manifest.appendMetadata(map[string]any{
+		"id": "res_1", "smiles": "CCO",
+		"adme":    map[string]any{"solubility": "high"},
+		"metrics": map[string]any{"iptm": 0.91},
+	}, "res_1"))
+
+	csvPath := filepath.Join(runDir, "results", downloadResultsSummaryCSVName)
+	sizeBeforeSecondAppend, err := fileSize(csvPath)
+	require.NoError(t, err)
+
+	require.NoError(t, manifest.appendMetadata(map[string]any{
+		"id": "res_2", "smiles": "CCN",
+		"adme":    map[string]any{"solubility": "low"},
+		"metrics": map[string]any{"iptm": 0.78},
+	}, "res_2"))
+
+	sizeAfter, err := fileSize(csvPath)
+	require.NoError(t, err)
+	assert.Greater(t, sizeAfter, sizeBeforeSecondAppend, "second append should extend summary.csv, not rewrite it")
+
+	headers, rows := readDownloadResultsTestCSV(t, csvPath)
+	assert.Equal(t, []string{"smiles", "id", "adme.solubility", "metrics.iptm"}, headers)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "CCN", rows[1]["smiles"])
+	assert.Equal(t, "0.78", rows[1]["metrics.iptm"])
+}
+
+func TestSummaryRegeneratesWhenRowIntroducesNewColumn(t *testing.T) {
+	runDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(runDir, "results"), 0o755))
+
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeSmallMoleculeDesign)
+	require.NoError(t, manifest.appendMetadata(map[string]any{
+		"id": "res_1", "smiles": "CCO",
+		"metrics": map[string]any{"iptm": 0.91},
+	}, "res_1"))
+	require.NoError(t, manifest.appendMetadata(map[string]any{
+		"id": "res_2", "smiles": "CCN",
+		"metrics": map[string]any{"iptm": 0.78, "binding_confidence": 0.42},
+	}, "res_2"))
+
+	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
+	assert.Equal(t, []string{"smiles", "id", "metrics.binding_confidence", "metrics.iptm"}, headers)
+	require.Len(t, rows, 2)
+	// res_1 predates the new column; cell must be empty.
+	assert.Equal(t, "", rows[0]["metrics.binding_confidence"])
+	assert.Equal(t, "0.42", rows[1]["metrics.binding_confidence"])
+}
+
+func TestAppenderLoadReconcilesStaleSummary(t *testing.T) {
+	// Simulate a prior crash: JSONL has 3 rows on disk, summary.csv only
+	// reflects 2. The next CLI invocation must regenerate the CSV from the
+	// JSONL on load() so the sidecar matches its source again.
+	runDir := t.TempDir()
+	resultsDir := filepath.Join(runDir, "results")
+	require.NoError(t, os.MkdirAll(resultsDir, 0o755))
+
+	writeJSONL(t, filepath.Join(resultsDir, downloadResultsResultIndexName), []string{
+		`{"id":"res_1","smiles":"CCO","metrics":{"iptm":0.91}}`,
+		`{"id":"res_2","smiles":"CCN","metrics":{"iptm":0.78}}`,
+		`{"id":"res_3","smiles":"CCC","metrics":{"iptm":0.65}}`,
+	})
+	require.NoError(t, os.WriteFile(filepath.Join(resultsDir, downloadResultsSummaryCSVName),
+		[]byte("smiles,id,metrics.iptm\nCCO,res_1,0.91\nCCN,res_2,0.78\n"), 0o644))
+
+	// load() runs on the first append; trigger it with a duplicate id so we
+	// hit the load path without writing anything new.
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeSmallMoleculeDesign)
+	require.NoError(t, manifest.appendMetadata(map[string]any{"id": "res_1"}, "res_1"))
+
+	_, rows := readDownloadResultsTestCSV(t, filepath.Join(resultsDir, downloadResultsSummaryCSVName))
+	require.Len(t, rows, 3, "summary.csv must be regenerated to match the JSONL")
+	assert.Equal(t, "CCC", rows[2]["smiles"])
+}
+
+func fileSize(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
 }
 
 func writeJSONL(t *testing.T, path string, lines []string) {

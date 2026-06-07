@@ -1634,6 +1634,12 @@ type pipelineResultManifestAppender struct {
 	runType  downloadRunType
 	loaded   bool
 	knownIDs map[string]struct{}
+	// Column state for the small-molecule summary.csv fast path. Headers on
+	// disk are cached so each new result can be appended as a single row
+	// without rewriting the whole file. A row introducing a new column
+	// triggers a fallback full regenerate and refreshes the cache.
+	csvHeaderOrder []string
+	csvHeaderSet   map[string]struct{}
 }
 
 func newPipelineResultManifestAppender(runDir string, runType downloadRunType) *pipelineResultManifestAppender {
@@ -1685,7 +1691,51 @@ func (m *pipelineResultManifestAppender) appendEntry(entry map[string]any) error
 	if !isSmallMoleculePipelineRunType(m.runType) {
 		return nil
 	}
-	return writeSmallMoleculeSummaryCSV(m.runDir)
+	return m.updateSmallMoleculeSummary(entry)
+}
+
+// updateSmallMoleculeSummary keeps results/summary.csv in step with the
+// JSONL. If the new row's columns are already in the cached header, we
+// append a single record (O(1)). A new column forces a fresh regenerate
+// and refreshes the cache.
+func (m *pipelineResultManifestAppender) updateSmallMoleculeSummary(entry map[string]any) error {
+	flat := flattenSmallMoleculeSummaryRow(entry)
+	csvPath := filepath.Join(m.runDir, "results", downloadResultsSummaryCSVName)
+
+	if m.csvHeaderSet != nil && summaryRowFitsHeaders(flat, m.csvHeaderSet) {
+		return appendSmallMoleculeSummaryRow(csvPath, m.csvHeaderOrder, flat)
+	}
+	return m.regenerateSmallMoleculeSummary()
+}
+
+func (m *pipelineResultManifestAppender) regenerateSmallMoleculeSummary() error {
+	if err := generateSmallMoleculeSummary(m.runDir); err != nil {
+		return err
+	}
+	return m.refreshSmallMoleculeSummaryHeaders()
+}
+
+func (m *pipelineResultManifestAppender) refreshSmallMoleculeSummaryHeaders() error {
+	csvPath := filepath.Join(m.runDir, "results", downloadResultsSummaryCSVName)
+	headers, err := readSmallMoleculeSummaryHeaders(csvPath)
+	if err != nil {
+		return err
+	}
+	m.csvHeaderOrder = headers
+	m.csvHeaderSet = make(map[string]struct{}, len(headers))
+	for _, h := range headers {
+		m.csvHeaderSet[h] = struct{}{}
+	}
+	return nil
+}
+
+func summaryRowFitsHeaders(flat map[string]string, headerSet map[string]struct{}) bool {
+	for key := range flat {
+		if _, ok := headerSet[key]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *pipelineResultManifestAppender) load() error {
@@ -1703,6 +1753,16 @@ func (m *pipelineResultManifestAppender) load() error {
 		}
 	}
 	m.knownIDs = ids
+
+	// Reconcile any drift left by a prior crashed run (e.g. JSONL ahead of
+	// CSV) with one full regenerate, then cache the header row so the next
+	// appendEntry can take the fast path.
+	if isSmallMoleculePipelineRunType(m.runType) {
+		if err := m.regenerateSmallMoleculeSummary(); err != nil {
+			return err
+		}
+	}
+
 	m.loaded = true
 	return nil
 }
@@ -1785,7 +1845,7 @@ func rebuildPipelineResultManifest(runDir string, runType downloadRunType) error
 	if !isSmallMoleculePipelineRunType(runType) {
 		return nil
 	}
-	return writeSmallMoleculeSummaryCSV(runDir)
+	return generateSmallMoleculeSummary(runDir)
 }
 
 func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string {

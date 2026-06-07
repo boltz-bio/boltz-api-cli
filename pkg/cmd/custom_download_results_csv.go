@@ -16,16 +16,13 @@ import (
 
 const downloadResultsSummaryCSVName = "summary.csv"
 
-// smallMoleculeSummaryDroppedKeys lists top-level manifest keys we strip
-// before flattening: "paths" is local-machine noise in a scientist-facing
-// summary, and "created_at" duplicates row order without aiding analysis.
-// They remain in results/index.jsonl for tooling that wants them.
+// Dropped from the summary because they add noise (paths are local-machine,
+// created_at duplicates row order). Both stay in results/index.jsonl.
 var smallMoleculeSummaryDroppedKeys = []string{"paths", "created_at"}
 
-// isSmallMoleculePipelineRunType reports whether the run produces tabular
-// per-molecule rows (SMILES + scores) that make sense as a CSV summary.
-// Other pipelines (protein design / screen) emit per-row data that does not
-// flatten cleanly to a single table, so we skip the summary for them.
+// Only small-molecule pipelines emit rows that flatten cleanly into a table
+// (SMILES + ADME + metrics). Protein pipelines store sequences inside an
+// `entities` array that doesn't fit a single tabular row.
 func isSmallMoleculePipelineRunType(runType downloadRunType) bool {
 	switch runType {
 	case downloadRunTypeSmallMoleculeDesign, downloadRunTypeSmallMoleculeScreen:
@@ -35,23 +32,12 @@ func isSmallMoleculePipelineRunType(runType downloadRunType) bool {
 	}
 }
 
-// writeSmallMoleculeSummaryCSV derives results/summary.csv from
-// results/index.jsonl for small-molecule pipelines. The CSV is a strict,
-// deterministic projection of the JSONL with two transformations:
-//
-//   - smallMoleculeSummaryDroppedKeys (paths, created_at) are removed before
-//     flattening, since they add noise to a scientist-facing summary
-//   - remaining nested maps are flattened with dotted keys; slices are encoded
-//     as compact JSON strings
-//
-// The column set is the union of keys across rows; missing cells are empty.
-// The "smiles" column is placed first (the scientific identifier the
-// reader is most likely to scan), "id" second, and the remaining columns
-// are sorted lexicographically.
-//
-// If the JSONL is missing, any existing summary is removed so a stale sidecar
-// never outlives the manifest it derives from.
-func writeSmallMoleculeSummaryCSV(runDir string) error {
+// generateSmallMoleculeSummary builds results/summary.csv as a fresh
+// projection of results/index.jsonl: drops smallMoleculeSummaryDroppedKeys,
+// flattens nested maps with dotted keys, encodes slices as compact JSON.
+// Columns: smiles, id, then sorted remainder. Removes a stale summary if the
+// JSONL is gone so the sidecar never outlives its source.
+func generateSmallMoleculeSummary(runDir string) error {
 	resultsDir := filepath.Join(runDir, "results")
 	jsonlPath := filepath.Join(resultsDir, downloadResultsResultIndexName)
 	csvPath := filepath.Join(resultsDir, downloadResultsSummaryCSVName)
@@ -67,21 +53,75 @@ func writeSmallMoleculeSummaryCSV(runDir string) error {
 	flattened := make([]map[string]string, 0, len(rows))
 	keySet := map[string]struct{}{}
 	for _, row := range rows {
-		cloned := cloneDownloadJSONMap(row)
-		for _, key := range smallMoleculeSummaryDroppedKeys {
-			delete(cloned, key)
-		}
-
-		flat := map[string]string{}
-		flattenManifestValue("", cloned, flat)
+		flat := flattenSmallMoleculeSummaryRow(row)
 		flattened = append(flattened, flat)
 		for key := range flat {
 			keySet[key] = struct{}{}
 		}
 	}
 
-	headers := orderedSummaryCSVHeaders(keySet)
+	headers := orderedSmallMoleculeSummaryHeaders(keySet)
 	return writeDownloadCSVFile(csvPath, headers, flattened)
+}
+
+// appendSmallMoleculeSummaryRow appends one record to summary.csv using the
+// caller-supplied header order. Missing keys become empty cells. This is the
+// fast path used when the row's columns are already a subset of the file's
+// header line — no need to rewrite the whole file.
+func appendSmallMoleculeSummaryRow(csvPath string, headerOrder []string, flat map[string]string) error {
+	if err := os.MkdirAll(filepath.Dir(csvPath), 0o755); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(csvPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	record := make([]string, len(headerOrder))
+	for i, header := range headerOrder {
+		record[i] = flat[header]
+	}
+	writer := csv.NewWriter(file)
+	if err := writer.Write(record); err != nil {
+		return err
+	}
+	writer.Flush()
+	return writer.Error()
+}
+
+// readSmallMoleculeSummaryHeaders returns the column names from the CSV's
+// first line, or nil if the file is missing. Used to seed the appender's
+// cache so subsequent rows can take the fast-path.
+func readSmallMoleculeSummaryHeaders(csvPath string) ([]string, error) {
+	file, err := os.Open(csvPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	record, err := reader.Read()
+	if errors.Is(err, io.EOF) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return record, nil
+}
+
+func flattenSmallMoleculeSummaryRow(row map[string]any) map[string]string {
+	cloned := cloneDownloadJSONMap(row)
+	for _, key := range smallMoleculeSummaryDroppedKeys {
+		delete(cloned, key)
+	}
+	flat := map[string]string{}
+	flattenManifestValue("", cloned, flat)
+	return flat
 }
 
 func readDownloadJSONLRows(path string) ([]map[string]any, error) {
@@ -104,10 +144,9 @@ func readDownloadJSONLRows(path string) ([]map[string]any, error) {
 	}
 }
 
-// flattenManifestValue recursively flattens nested maps with dotted keys.
-// Slices and unknown structured values are written as compact JSON strings so
-// every CSV cell is a single scalar. Empty maps become "{}" so a downstream
-// reader can tell them apart from a missing key.
+// Recursively flattens nested maps with dotted keys; slices and other
+// structured values are JSON-encoded so every CSV cell stays a single scalar.
+// Empty maps become "{}" so consumers can distinguish them from missing keys.
 func flattenManifestValue(prefix string, value any, out map[string]string) {
 	switch v := value.(type) {
 	case nil:
@@ -142,10 +181,9 @@ func flattenManifestValue(prefix string, value any, out map[string]string) {
 	}
 }
 
-// orderedSummaryCSVHeaders pins the natural identifier columns first
-// ("smiles" then "id") and sorts the rest lexicographically so the file is
-// diff-friendly and easy to scan.
-func orderedSummaryCSVHeaders(keySet map[string]struct{}) []string {
+// "smiles" leads (the scientific identifier readers scan first), then "id",
+// then sorted remainder for diff-friendliness.
+func orderedSmallMoleculeSummaryHeaders(keySet map[string]struct{}) []string {
 	rest := make([]string, 0, len(keySet))
 	hasID := false
 	hasSMILES := false
