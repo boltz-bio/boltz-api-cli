@@ -16,6 +16,12 @@ import (
 
 const downloadResultsSummaryCSVName = "summary.csv"
 
+// smallMoleculeSummaryDroppedKeys lists top-level manifest keys we strip
+// before flattening: "paths" is local-machine noise in a scientist-facing
+// summary, and "created_at" duplicates row order without aiding analysis.
+// They remain in results/index.jsonl for tooling that wants them.
+var smallMoleculeSummaryDroppedKeys = []string{"paths", "created_at"}
+
 // isSmallMoleculePipelineRunType reports whether the run produces tabular
 // per-molecule rows (SMILES + scores) that make sense as a CSV summary.
 // Other pipelines (protein design / screen) emit per-row data that does not
@@ -33,8 +39,8 @@ func isSmallMoleculePipelineRunType(runType downloadRunType) bool {
 // results/index.jsonl for small-molecule pipelines. The CSV is a strict,
 // deterministic projection of the JSONL with two transformations:
 //
-//   - the per-row "paths" object is dropped (local file pointers are noise in
-//     a scientist-facing summary)
+//   - smallMoleculeSummaryDroppedKeys (paths, created_at) are removed before
+//     flattening, since they add noise to a scientist-facing summary
 //   - remaining nested maps are flattened with dotted keys; slices are encoded
 //     as compact JSON strings
 //
@@ -62,7 +68,9 @@ func writeSmallMoleculeSummaryCSV(runDir string) error {
 	keySet := map[string]struct{}{}
 	for _, row := range rows {
 		cloned := cloneDownloadJSONMap(row)
-		delete(cloned, "paths")
+		for _, key := range smallMoleculeSummaryDroppedKeys {
+			delete(cloned, key)
+		}
 
 		flat := map[string]string{}
 		flattenManifestValue("", cloned, flat)

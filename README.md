@@ -253,9 +253,9 @@ It also writes a sanitized `run.json` for the remote run. Pipeline downloads alw
 `results/index.jsonl` manifest with one result per line. Small-molecule
 pipelines (`small-molecule:design`, `small-molecule:library-screen`)
 additionally get a sibling `results/summary.csv` — a scientist-friendly flat
-projection of the same rows with `smiles` and `id` first and the per-row
-`paths` object dropped (nested fields are flattened with dotted keys; slices
-are encoded as JSON strings). By default, pipeline downloads use
+projection of the same rows with `smiles` and `id` first, the per-row
+`paths` object and `created_at` dropped (nested fields are flattened with
+dotted keys; slices are encoded as JSON strings). By default, pipeline downloads use
 `--download-mode everything`, which writes `results/<result-id>/metadata.json`, downloads each archive,
 extracts it, and adds local artifact paths to the manifest. Use `--download-mode metadata_only` to
 write only the manifest metadata.

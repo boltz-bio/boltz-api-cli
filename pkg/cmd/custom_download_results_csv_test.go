@@ -18,15 +18,15 @@ func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(jsonlPath), 0o755))
 
 	writeJSONL(t, jsonlPath, []string{
-		`{"id":"res_1","smiles":"CCO","adme":{"solubility":"high"},"metrics":{"iptm":0.91},"paths":{"archive":"results/res_1/archive.tar.gz","files":"results/res_1/files"}}`,
-		`{"id":"res_2","smiles":"CCN","adme":{"solubility":"low"},"metrics":{"iptm":0.78,"binding_confidence":0.42},"paths":{"archive":"results/res_2/archive.tar.gz"}}`,
+		`{"id":"res_1","smiles":"CCO","created_at":"2026-06-07T19:48:31.116Z","adme":{"solubility":"high"},"metrics":{"iptm":0.91},"paths":{"archive":"results/res_1/archive.tar.gz","files":"results/res_1/files"}}`,
+		`{"id":"res_2","smiles":"CCN","created_at":"2026-06-07T19:48:55.852Z","adme":{"solubility":"low"},"metrics":{"iptm":0.78,"binding_confidence":0.42},"paths":{"archive":"results/res_2/archive.tar.gz"}}`,
 	})
 
 	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
 
 	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
 
-	// smiles first, id second, rest alphabetical; no paths.* columns.
+	// smiles first, id second, rest alphabetical; no paths.* or created_at columns.
 	assert.Equal(t, []string{
 		"smiles",
 		"id",
@@ -34,6 +34,7 @@ func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
 		"metrics.binding_confidence",
 		"metrics.iptm",
 	}, headers)
+	assert.NotContains(t, headers, "created_at")
 
 	require.Len(t, rows, 2)
 	assert.Equal(t, "res_1", rows[0]["id"])
