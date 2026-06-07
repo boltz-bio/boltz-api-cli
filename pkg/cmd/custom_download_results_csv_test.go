@@ -12,112 +12,106 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWriteDownloadCSVFromJSONLBuildsFlatRows(t *testing.T) {
+func TestWriteSmallMoleculeSummaryCSVFlattenAndDropPaths(t *testing.T) {
 	runDir := t.TempDir()
 	jsonlPath := filepath.Join(runDir, "results", downloadResultsResultIndexName)
 	require.NoError(t, os.MkdirAll(filepath.Dir(jsonlPath), 0o755))
 
 	writeJSONL(t, jsonlPath, []string{
-		`{"id":"res_1","name":"binder-a","paths":{"archive":"results/res_1/archive.tar.gz","files":"results/res_1/files"},"metrics":{"plddt":0.91,"iptm":0.78}}`,
-		`{"id":"res_2","name":"binder-b","paths":{"archive":"results/res_2/archive.tar.gz"},"metrics":{"plddt":0.87}}`,
+		`{"id":"res_1","smiles":"CCO","adme":{"solubility":"high"},"metrics":{"iptm":0.91},"paths":{"archive":"results/res_1/archive.tar.gz","files":"results/res_1/files"}}`,
+		`{"id":"res_2","smiles":"CCN","adme":{"solubility":"low"},"metrics":{"iptm":0.78,"binding_confidence":0.42},"paths":{"archive":"results/res_2/archive.tar.gz"}}`,
 	})
 
-	require.NoError(t, writeDownloadCSVFromJSONL(runDir))
+	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
 
-	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsResultCSVName))
+	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
 
-	// id must be the first column; remaining columns are sorted lexicographically.
-	require.Equal(t, "id", headers[0])
+	// smiles first, id second, rest alphabetical; no paths.* columns.
 	assert.Equal(t, []string{
+		"smiles",
 		"id",
+		"adme.solubility",
+		"metrics.binding_confidence",
 		"metrics.iptm",
-		"metrics.plddt",
-		"name",
-		"paths.archive",
-		"paths.files",
 	}, headers)
 
 	require.Len(t, rows, 2)
 	assert.Equal(t, "res_1", rows[0]["id"])
-	assert.Equal(t, "binder-a", rows[0]["name"])
-	assert.Equal(t, "results/res_1/archive.tar.gz", rows[0]["paths.archive"])
-	assert.Equal(t, "results/res_1/files", rows[0]["paths.files"])
-	assert.Equal(t, "0.91", rows[0]["metrics.plddt"])
-	assert.Equal(t, "0.78", rows[0]["metrics.iptm"])
+	assert.Equal(t, "CCO", rows[0]["smiles"])
+	assert.Equal(t, "high", rows[0]["adme.solubility"])
+	assert.Equal(t, "0.91", rows[0]["metrics.iptm"])
+	// row 1 lacks binding_confidence; cell must be empty rather than missing.
+	assert.Equal(t, "", rows[0]["metrics.binding_confidence"])
 
-	// Row 2 lacks paths.files and metrics.iptm; cells must be empty rather than missing.
 	assert.Equal(t, "res_2", rows[1]["id"])
-	assert.Equal(t, "", rows[1]["paths.files"])
-	assert.Equal(t, "", rows[1]["metrics.iptm"])
-	assert.Equal(t, "0.87", rows[1]["metrics.plddt"])
+	assert.Equal(t, "CCN", rows[1]["smiles"])
+	assert.Equal(t, "0.42", rows[1]["metrics.binding_confidence"])
+
+	// Sanity: no paths.* leaked into the CSV.
+	for _, header := range headers {
+		assert.False(t, strings.HasPrefix(header, "paths."), "paths.* column should not appear: %s", header)
+	}
 }
 
-func TestWriteDownloadCSVFromJSONLEncodesSlicesAsJSON(t *testing.T) {
+func TestWriteSmallMoleculeSummaryCSVRemovesStaleCSVWhenJSONLMissing(t *testing.T) {
 	runDir := t.TempDir()
-	jsonlPath := filepath.Join(runDir, "results", downloadResultsResultIndexName)
-	require.NoError(t, os.MkdirAll(filepath.Dir(jsonlPath), 0o755))
-
-	writeJSONL(t, jsonlPath, []string{
-		`{"id":"res_1","chains":["A","B"],"flags":{"ok":true,"label":""}}`,
-	})
-
-	require.NoError(t, writeDownloadCSVFromJSONL(runDir))
-
-	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsResultCSVName))
-	require.Equal(t, []string{"id", "chains", "flags.label", "flags.ok"}, headers)
-	require.Len(t, rows, 1)
-
-	assert.Equal(t, `["A","B"]`, rows[0]["chains"])
-	assert.Equal(t, "true", rows[0]["flags.ok"])
-	assert.Equal(t, "", rows[0]["flags.label"])
-}
-
-func TestWriteDownloadCSVFromJSONLRemovesStaleCSVWhenJSONLMissing(t *testing.T) {
-	runDir := t.TempDir()
-	csvPath := filepath.Join(runDir, "results", downloadResultsResultCSVName)
+	csvPath := filepath.Join(runDir, "results", downloadResultsSummaryCSVName)
 	require.NoError(t, os.MkdirAll(filepath.Dir(csvPath), 0o755))
 	require.NoError(t, os.WriteFile(csvPath, []byte("id\nold\n"), 0o644))
 
-	require.NoError(t, writeDownloadCSVFromJSONL(runDir))
+	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
 
 	_, err := os.Stat(csvPath)
-	assert.True(t, os.IsNotExist(err), "expected stale CSV to be removed, got err=%v", err)
+	assert.True(t, os.IsNotExist(err), "expected stale summary.csv to be removed, got err=%v", err)
 }
 
-func TestWriteDownloadCSVFromJSONLNoopWhenNoResultsDir(t *testing.T) {
+func TestWriteSmallMoleculeSummaryCSVNoopWhenNoResultsDir(t *testing.T) {
 	runDir := t.TempDir()
-	// No results/ directory yet. The CSV writer must not fail when there is
+	// No results/ directory yet. The writer must not fail when there is
 	// nothing to derive from: appendEntry calls this before the directory has
 	// been populated on the very first row.
-	require.NoError(t, writeDownloadCSVFromJSONL(runDir))
+	require.NoError(t, writeSmallMoleculeSummaryCSV(runDir))
 }
 
-func TestPipelineResultManifestAppenderWritesCSVAlongsideJSONL(t *testing.T) {
+func TestPipelineResultManifestAppenderWritesSummaryForSmallMolecule(t *testing.T) {
 	runDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(runDir, "results"), 0o755))
 
-	manifest := newPipelineResultManifestAppender(runDir)
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeSmallMoleculeDesign)
 	require.NoError(t, manifest.appendMetadata(map[string]any{
-		"id":   "res_1",
-		"name": "binder-a",
+		"id":     "res_1",
+		"smiles": "CCO",
+		"adme":   map[string]any{"solubility": "high"},
 		"paths": map[string]any{
 			"archive": "results/res_1/archive.tar.gz",
 		},
 	}, "res_1"))
-	require.NoError(t, manifest.appendMetadata(map[string]any{
-		"id":   "res_2",
-		"name": "binder-b",
-	}, "res_2"))
 
-	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsResultCSVName))
-	require.Equal(t, []string{"id", "name", "paths.archive"}, headers)
-	require.Len(t, rows, 2)
+	headers, rows := readDownloadResultsTestCSV(t, filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
+	assert.Equal(t, []string{"smiles", "id", "adme.solubility"}, headers)
+	require.Len(t, rows, 1)
 	assert.Equal(t, "res_1", rows[0]["id"])
-	assert.Equal(t, "results/res_1/archive.tar.gz", rows[0]["paths.archive"])
-	assert.Equal(t, "res_2", rows[1]["id"])
-	// res_2 has no paths.archive; we still want a header column for it because
-	// res_1 had one, and the cell must be empty for res_2.
-	assert.Equal(t, "", rows[1]["paths.archive"])
+	assert.Equal(t, "CCO", rows[0]["smiles"])
+	assert.Equal(t, "high", rows[0]["adme.solubility"])
+}
+
+func TestPipelineResultManifestAppenderSkipsSummaryForProteinDesign(t *testing.T) {
+	runDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(runDir, "results"), 0o755))
+
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeProteinDesign)
+	require.NoError(t, manifest.appendMetadata(map[string]any{
+		"id": "res_1",
+		"entities": []any{
+			map[string]any{"type": "protein", "value": "MKTII"},
+		},
+	}, "res_1"))
+
+	// JSONL is written for every pipeline...
+	assert.FileExists(t, filepath.Join(runDir, "results", downloadResultsResultIndexName))
+	// ...but the summary.csv is small-molecule only.
+	_, err := os.Stat(filepath.Join(runDir, "results", downloadResultsSummaryCSVName))
+	assert.True(t, os.IsNotExist(err), "summary.csv should not be written for non-small-molecule runs")
 }
 
 func writeJSONL(t *testing.T, path string, lines []string) {

@@ -14,21 +14,41 @@ import (
 	"strings"
 )
 
-const downloadResultsResultCSVName = "index.csv"
+const downloadResultsSummaryCSVName = "summary.csv"
 
-// writeDownloadCSVFromJSONL derives results/index.csv from results/index.jsonl.
-// The CSV is a strict, deterministic projection of the JSONL: same rows in the
-// same order, with nested maps flattened using dotted keys and slices encoded
-// as compact JSON strings. The column set is the union of keys across rows;
-// missing cells are empty. The "id" column is placed first and the remaining
-// columns are sorted lexicographically so the file is diff-friendly.
+// isSmallMoleculePipelineRunType reports whether the run produces tabular
+// per-molecule rows (SMILES + scores) that make sense as a CSV summary.
+// Other pipelines (protein design / screen) emit per-row data that does not
+// flatten cleanly to a single table, so we skip the summary for them.
+func isSmallMoleculePipelineRunType(runType downloadRunType) bool {
+	switch runType {
+	case downloadRunTypeSmallMoleculeDesign, downloadRunTypeSmallMoleculeScreen:
+		return true
+	default:
+		return false
+	}
+}
+
+// writeSmallMoleculeSummaryCSV derives results/summary.csv from
+// results/index.jsonl for small-molecule pipelines. The CSV is a strict,
+// deterministic projection of the JSONL with two transformations:
 //
-// If the JSONL is missing, any existing CSV is removed so a stale sidecar
+//   - the per-row "paths" object is dropped (local file pointers are noise in
+//     a scientist-facing summary)
+//   - remaining nested maps are flattened with dotted keys; slices are encoded
+//     as compact JSON strings
+//
+// The column set is the union of keys across rows; missing cells are empty.
+// The "smiles" column is placed first (the scientific identifier the
+// reader is most likely to scan), "id" second, and the remaining columns
+// are sorted lexicographically.
+//
+// If the JSONL is missing, any existing summary is removed so a stale sidecar
 // never outlives the manifest it derives from.
-func writeDownloadCSVFromJSONL(runDir string) error {
+func writeSmallMoleculeSummaryCSV(runDir string) error {
 	resultsDir := filepath.Join(runDir, "results")
 	jsonlPath := filepath.Join(resultsDir, downloadResultsResultIndexName)
-	csvPath := filepath.Join(resultsDir, downloadResultsResultCSVName)
+	csvPath := filepath.Join(resultsDir, downloadResultsSummaryCSVName)
 
 	rows, err := readDownloadJSONLRows(jsonlPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -41,15 +61,18 @@ func writeDownloadCSVFromJSONL(runDir string) error {
 	flattened := make([]map[string]string, 0, len(rows))
 	keySet := map[string]struct{}{}
 	for _, row := range rows {
+		cloned := cloneDownloadJSONMap(row)
+		delete(cloned, "paths")
+
 		flat := map[string]string{}
-		flattenManifestValue("", row, flat)
+		flattenManifestValue("", cloned, flat)
 		flattened = append(flattened, flat)
 		for key := range flat {
 			keySet[key] = struct{}{}
 		}
 	}
 
-	headers := orderedManifestCSVHeaders(keySet)
+	headers := orderedSummaryCSVHeaders(keySet)
 	return writeDownloadCSVFile(csvPath, headers, flattened)
 }
 
@@ -111,21 +134,33 @@ func flattenManifestValue(prefix string, value any, out map[string]string) {
 	}
 }
 
-func orderedManifestCSVHeaders(keySet map[string]struct{}) []string {
-	headers := make([]string, 0, len(keySet))
+// orderedSummaryCSVHeaders pins the natural identifier columns first
+// ("smiles" then "id") and sorts the rest lexicographically so the file is
+// diff-friendly and easy to scan.
+func orderedSummaryCSVHeaders(keySet map[string]struct{}) []string {
+	rest := make([]string, 0, len(keySet))
+	hasID := false
+	hasSMILES := false
 	for key := range keySet {
-		headers = append(headers, key)
-	}
-	sort.Strings(headers)
-	// Pin "id" first when present; it is the natural row identifier and
-	// almost always the first column a reader wants to see.
-	for i, header := range headers {
-		if header == "id" {
-			headers = append([]string{"id"}, append(headers[:i], headers[i+1:]...)...)
-			break
+		switch key {
+		case "id":
+			hasID = true
+		case "smiles":
+			hasSMILES = true
+		default:
+			rest = append(rest, key)
 		}
 	}
-	return headers
+	sort.Strings(rest)
+
+	headers := make([]string, 0, len(keySet))
+	if hasSMILES {
+		headers = append(headers, "smiles")
+	}
+	if hasID {
+		headers = append(headers, "id")
+	}
+	return append(headers, rest...)
 }
 
 func writeDownloadCSVFile(path string, headers []string, rows []map[string]string) error {

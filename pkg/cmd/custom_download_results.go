@@ -1037,7 +1037,7 @@ func (e *downloadResultsEngine) waitForPipeline(ctx context.Context, runDir stri
 		return fmt.Errorf("Run %s has no confirmed remote run ID", runDir)
 	}
 	e.sink.info("waiting", fmt.Sprintf("Waiting for %s in %s", strings.ReplaceAll(string(metadata.RunType), "_", " "), runDir), runDir, metadata, nil)
-	manifest := newPipelineResultManifestAppender(runDir)
+	manifest := newPipelineResultManifestAppender(runDir, metadata.RunType)
 
 	for {
 		response, err := e.getPipeline(ctx, metadata.RunType, runID, metadata.Remote.WorkspaceID)
@@ -1631,12 +1631,13 @@ func savePipelineResultMetadata(resultDir string, result downloadPipelineResultI
 
 type pipelineResultManifestAppender struct {
 	runDir   string
+	runType  downloadRunType
 	loaded   bool
 	knownIDs map[string]struct{}
 }
 
-func newPipelineResultManifestAppender(runDir string) *pipelineResultManifestAppender {
-	return &pipelineResultManifestAppender{runDir: runDir}
+func newPipelineResultManifestAppender(runDir string, runType downloadRunType) *pipelineResultManifestAppender {
+	return &pipelineResultManifestAppender{runDir: runDir, runType: runType}
 }
 
 func (m *pipelineResultManifestAppender) appendResult(resultDir string, fallbackID string) error {
@@ -1681,7 +1682,10 @@ func (m *pipelineResultManifestAppender) appendEntry(entry map[string]any) error
 		return err
 	}
 	m.knownIDs[id] = struct{}{}
-	return writeDownloadCSVFromJSONL(m.runDir)
+	if !isSmallMoleculePipelineRunType(m.runType) {
+		return nil
+	}
+	return writeSmallMoleculeSummaryCSV(m.runDir)
 }
 
 func (m *pipelineResultManifestAppender) load() error {
@@ -1690,7 +1694,7 @@ func (m *pipelineResultManifestAppender) load() error {
 	}
 	ids, err := readPipelineResultManifestIDs(m.runDir)
 	if err != nil {
-		if rebuildErr := rebuildPipelineResultManifest(m.runDir); rebuildErr != nil {
+		if rebuildErr := rebuildPipelineResultManifest(m.runDir, m.runType); rebuildErr != nil {
 			return fmt.Errorf("read result manifest IDs: %w; rebuild failed: %w", err, rebuildErr)
 		}
 		ids, err = readPipelineResultManifestIDs(m.runDir)
@@ -1745,7 +1749,7 @@ func pipelineResultManifestEntry(runDir string, resultDir string, fallbackID str
 	return metadata, nil
 }
 
-func rebuildPipelineResultManifest(runDir string) error {
+func rebuildPipelineResultManifest(runDir string, runType downloadRunType) error {
 	resultsDir := filepath.Join(runDir, "results")
 	entries, err := os.ReadDir(resultsDir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -1778,7 +1782,10 @@ func rebuildPipelineResultManifest(runDir string) error {
 	if err := writeDownloadJSONLFile(filepath.Join(resultsDir, downloadResultsResultIndexName), manifest); err != nil {
 		return err
 	}
-	return writeDownloadCSVFromJSONL(runDir)
+	if !isSmallMoleculePipelineRunType(runType) {
+		return nil
+	}
+	return writeSmallMoleculeSummaryCSV(runDir)
 }
 
 func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string {
