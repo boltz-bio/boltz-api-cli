@@ -905,7 +905,7 @@ func TestPipelineResultManifestAppenderSkipsPreviouslyIndexedResults(t *testing.
 		Metadata: map[string]any{"id": "res_1", "score": 0.9},
 	}))
 
-	manifest := newPipelineResultManifestAppender(runDir)
+	manifest := newPipelineResultManifestAppender(runDir, downloadRunTypeProteinDesign)
 	require.NoError(t, manifest.appendResult(resultDir, "res_1"))
 	require.NoError(t, manifest.appendResult(resultDir, "res_1"))
 

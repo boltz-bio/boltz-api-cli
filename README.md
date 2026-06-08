@@ -254,7 +254,12 @@ They accept the same request flags as `start`, plus local output flags such as `
 When `--name` and `--run-dir` are omitted, the run ID maps to a deterministic readable name such as
 `boltz-experiments/lucid-atom-checks-2f7148`, so repeated downloads for the same remote run resume in the same directory.
 It also writes a sanitized `run.json` for the remote run. Pipeline downloads always include a
-`results/index.jsonl` manifest with one result per line. By default, pipeline downloads use
+`results/index.jsonl` manifest with one result per line. Small-molecule
+pipelines (`small-molecule:design`, `small-molecule:library-screen`)
+additionally get a sibling `results/summary.csv` — a scientist-friendly flat
+projection of the same rows with `smiles` and `id` first, the per-row
+`paths` object and `created_at` dropped (nested fields are flattened with
+dotted keys; slices are encoded as JSON strings). By default, pipeline downloads use
 `--download-mode everything`, which writes `results/<result-id>/metadata.json`, downloads each archive,
 extracts it, and adds local artifact paths to the manifest. Use `--download-mode metadata_only` to
 write only the manifest metadata.
