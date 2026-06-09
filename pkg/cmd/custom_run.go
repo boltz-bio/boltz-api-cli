@@ -49,7 +49,10 @@ type runCommandOptions struct {
 	Verbose             bool
 }
 
-const structureAndBindingRunInputUsage = "Structure and binding prediction input. Pass inline JSON/YAML, or use @json://... / @yaml://... for larger payload files. Include entities plus optional constraints, bonds, templates, binding settings, sample count, and model options. Keep --model, --idempotency-key, and --workspace-id as top-level flags."
+const (
+	structureAndBindingRunInputUsage = "Structure and binding prediction input. Pass inline JSON/YAML, or use @json://... / @yaml://... for larger payload files. Include entities plus optional constraints, bonds, templates, binding settings, sample count, and model options. Keep --model, --idempotency-key, and --workspace-id as top-level flags."
+	admeRunInputUsage                = "ADME prediction input. Pass inline JSON/YAML, or use @json://... / @yaml://... for larger molecule batches. Include molecules with SMILES and optional IDs. Keep --model, --idempotency-key, and --workspace-id as top-level flags."
+)
 
 var runResourceSpecs = []runResourceSpec{
 	{
@@ -140,7 +143,17 @@ func newRunCommand(spec runResourceSpec, startCommand *cli.Command) *cli.Command
 }
 
 func annotateRunInputFlags(spec runResourceSpec, flags []cli.Flag) {
-	if len(spec.Path) != 1 || spec.Path[0] != "predictions:structure-and-binding" {
+	if len(spec.Path) != 1 {
+		return
+	}
+
+	inputUsage := ""
+	switch spec.Path[0] {
+	case "predictions:structure-and-binding":
+		inputUsage = structureAndBindingRunInputUsage
+	case "predictions:adme":
+		inputUsage = admeRunInputUsage
+	default:
 		return
 	}
 
@@ -151,7 +164,7 @@ func annotateRunInputFlags(spec runResourceSpec, flags []cli.Flag) {
 
 	usage, ok := flagStringField(inputFlag, "Usage")
 	if ok && strings.TrimSpace(usage) == "" {
-		setFlagStringField(inputFlag, "Usage", structureAndBindingRunInputUsage)
+		setFlagStringField(inputFlag, "Usage", inputUsage)
 	}
 }
 
