@@ -146,7 +146,7 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.templates",
-			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use chain_id and template_id to map request chains to template chains when the IDs differ or when providing multi-chain templates.",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use template_chains to map request chains to template-file chains.",
 			InnerField: "templates",
 		},
 	},
@@ -214,7 +214,7 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.templates",
-			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use chain_id and template_id to map request chains to template chains when the IDs differ or when providing multi-chain templates.",
+			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use template_chains to map request chains to template-file chains.",
 			InnerField: "templates",
 		},
 	},
