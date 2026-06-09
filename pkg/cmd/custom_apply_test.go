@@ -44,7 +44,7 @@ func TestApplyCustomizationsIsIdempotent(t *testing.T) {
 	ApplyCustomizations(root)
 	ApplyCustomizations(root)
 
-	require.Len(t, root.Commands, 4)
+	require.Len(t, root.Commands, 5)
 	require.Len(t, root.Flags, 11)
 	require.Equal(t, transformUsage, usageForFlag(t, mustFindFlag(t, root, "transform")))
 	require.Nil(t, findFlag(root, "no-browser"))
@@ -52,6 +52,7 @@ func TestApplyCustomizationsIsIdempotent(t *testing.T) {
 	mustFindCommand(t, root, "config")
 	mustFindCommand(t, root, "download-results")
 	mustFindCommand(t, root, "download-status")
+	mustFindCommand(t, root, "viewer", "open")
 }
 
 func TestApplyCustomizationsMergesGeneratedAuthCommand(t *testing.T) {
@@ -72,7 +73,7 @@ func TestApplyCustomizationsMergesGeneratedAuthCommand(t *testing.T) {
 	ApplyCustomizations(root)
 	ApplyCustomizations(root)
 
-	require.Len(t, root.Commands, 4)
+	require.Len(t, root.Commands, 5)
 	auth := mustFindCommand(t, root, "auth")
 	mustFindCommand(t, auth, "me")
 	mustFindCommand(t, auth, "login")
@@ -81,6 +82,18 @@ func TestApplyCustomizationsMergesGeneratedAuthCommand(t *testing.T) {
 	mustFindCommand(t, auth, "orgs")
 	mustFindCommand(t, auth, "switch-org")
 	require.Len(t, auth.Commands, len(authCommand.Commands)+1)
+}
+
+func TestApplyCustomizationsAddsViewerOpenCommand(t *testing.T) {
+	t.Parallel()
+
+	ApplyCustomizations(Command)
+
+	openCommand := mustFindCommand(t, Command, "viewer", "open")
+	mustFindFlag(t, openCommand, "dir")
+	mustFindFlag(t, openCommand, "workspace-dir")
+	mustFindFlag(t, openCommand, "viewer-url")
+	mustFindFlag(t, openCommand, "no-open")
 }
 
 func TestApplyCustomizationsAnnotatesRepeatableArrayFlags(t *testing.T) {

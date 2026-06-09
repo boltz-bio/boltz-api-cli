@@ -50,6 +50,10 @@ func ApplyCustomizations(app *cli.Command) {
 		app.Commands = append(app.Commands, downloadResultsCommand)
 	}
 
+	if !hasCommand(app.Commands, viewerCommand.Name) {
+		app.Commands = append(app.Commands, viewerCommand)
+	}
+
 	addMergedInputFlags(app)
 	addRunCommands(app)
 	if !hasCommand(app.Commands, downloadStatusCommand.Name) {
