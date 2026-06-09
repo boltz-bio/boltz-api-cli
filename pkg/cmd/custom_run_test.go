@@ -46,6 +46,15 @@ func TestApplyCustomizationsAddsRunCommands(t *testing.T) {
 		{
 			path:       []string{"predictions:adme"},
 			innerFlags: []string{"input.molecules"},
+			inputUsageContains: []string{
+				"ADME prediction input",
+				"inline JSON/YAML",
+				"@yaml://",
+				"molecules",
+				"SMILES",
+				"--model",
+				"--workspace-id",
+			},
 		},
 		{
 			path:       []string{"protein:design"},
