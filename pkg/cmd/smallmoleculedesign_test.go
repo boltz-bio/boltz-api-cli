@@ -58,7 +58,7 @@ func TestSmallMoleculeDesignEstimateCost(t *testing.T) {
 			"--api-key", "string",
 			"small-molecule:design", "estimate-cost",
 			"--num-molecules", "10",
-			"--target", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], pocket_residues: {A: [42, 43, 44, 67, 68, 69]}, precomputed_affinity_pocket: {method: reference_ligands, pocket_file_url: s3://J!/&*z57, structure_file_url: s3://J!/&*z57}, reference_ligands: [string], type: no_template}",
+			"--target", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], pocket_residues: {A: [42, 43, 44, 67, 68, 69]}, reference_ligands: [string], type: no_template}",
 			"--chemical-space", "enamine_real",
 			"--idempotency-key", "idempotency_key",
 			"--molecule-filters", "{boltz_smarts_catalog_filter_level: recommended, custom_filters: [{max_hba: 0, max_hbd: 0, max_logp: 0, max_mw: 0, type: lipinski_filter, allow_single_violation: true}]}",
@@ -80,7 +80,6 @@ func TestSmallMoleculeDesignEstimateCost(t *testing.T) {
 			"--target.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}]",
 			"--target.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--target.pocket-residues", "{A: [42, 43, 44, 67, 68, 69]}",
-			"--target.precomputed-affinity-pocket", "{method: reference_ligands, pocket_file_url: s3://J!/&*z57, structure_file_url: s3://J!/&*z57}",
 			"--target.reference-ligands", "[string]",
 			"--target.type", "no_template",
 			"--chemical-space", "enamine_real",
@@ -136,10 +135,6 @@ func TestSmallMoleculeDesignEstimateCost(t *testing.T) {
 			"      - 67\n" +
 			"      - 68\n" +
 			"      - 69\n" +
-			"  precomputed_affinity_pocket:\n" +
-			"    method: reference_ligands\n" +
-			"    pocket_file_url: s3://J!/&*z57\n" +
-			"    structure_file_url: s3://J!/&*z57\n" +
 			"  reference_ligands:\n" +
 			"    - string\n" +
 			"  type: no_template\n" +
@@ -188,7 +183,7 @@ func TestSmallMoleculeDesignStart(t *testing.T) {
 			"--api-key", "string",
 			"small-molecule:design", "start",
 			"--num-molecules", "10",
-			"--target", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], pocket_residues: {A: [42, 43, 44, 67, 68, 69]}, precomputed_affinity_pocket: {method: reference_ligands, pocket_file_url: s3://J!/&*z57, structure_file_url: s3://J!/&*z57}, reference_ligands: [string], type: no_template}",
+			"--target", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}]}], bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], pocket_residues: {A: [42, 43, 44, 67, 68, 69]}, reference_ligands: [string], type: no_template}",
 			"--chemical-space", "enamine_real",
 			"--idempotency-key", "idempotency_key",
 			"--molecule-filters", "{boltz_smarts_catalog_filter_level: recommended, custom_filters: [{max_hba: 0, max_hbd: 0, max_logp: 0, max_mw: 0, type: lipinski_filter, allow_single_violation: true}]}",
@@ -210,7 +205,6 @@ func TestSmallMoleculeDesignStart(t *testing.T) {
 			"--target.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}]",
 			"--target.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--target.pocket-residues", "{A: [42, 43, 44, 67, 68, 69]}",
-			"--target.precomputed-affinity-pocket", "{method: reference_ligands, pocket_file_url: s3://J!/&*z57, structure_file_url: s3://J!/&*z57}",
 			"--target.reference-ligands", "[string]",
 			"--target.type", "no_template",
 			"--chemical-space", "enamine_real",
@@ -266,10 +260,6 @@ func TestSmallMoleculeDesignStart(t *testing.T) {
 			"      - 67\n" +
 			"      - 68\n" +
 			"      - 69\n" +
-			"  precomputed_affinity_pocket:\n" +
-			"    method: reference_ligands\n" +
-			"    pocket_file_url: s3://J!/&*z57\n" +
-			"    structure_file_url: s3://J!/&*z57\n" +
 			"  reference_ligands:\n" +
 			"    - string\n" +
 			"  type: no_template\n" +

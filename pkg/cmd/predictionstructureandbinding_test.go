@@ -57,7 +57,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "estimate-cost",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force: true, threshold: 0}]}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -79,7 +79,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}",
 			"--input.num-samples", "1",
-			"--input.templates", "[{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force: true, threshold: 0}]",
+			"--input.templates", "[{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -143,8 +143,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"      template_structure:\n" +
 			"        type: url\n" +
 			"        url: https://example.com\n" +
-			"      force: true\n" +
-			"      threshold: 0\n" +
+			"      force_threshold_angstroms: 0\n" +
 			"model: boltz-2.1\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")
@@ -163,7 +162,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "start",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force: true, threshold: 0}]}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -185,7 +184,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 1, step_scale: 1.3}",
 			"--input.num-samples", "1",
-			"--input.templates", "[{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force: true, threshold: 0}]",
+			"--input.templates", "[{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -249,8 +248,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"      template_structure:\n" +
 			"        type: url\n" +
 			"        url: https://example.com\n" +
-			"      force: true\n" +
-			"      threshold: 0\n" +
+			"      force_threshold_angstroms: 0\n" +
 			"model: boltz-2.1\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")
