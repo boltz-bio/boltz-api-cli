@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.29.0 (2026-06-15)
+
+Full Changelog: [v0.28.0...v0.29.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.28.0...v0.29.0)
+
+### Features
+
+* **cli:** add ADME estimate-cost command ([ffdaaf5](https://github.com/boltz-bio/boltz-api-cli/commit/ffdaaf56beadbb57d28beec086019876b2ec8201))
+
+
+### Bug Fixes
+
+* **cli:** describe adme run input flag ([6e86a97](https://github.com/boltz-bio/boltz-api-cli/commit/6e86a97abc77694d16cf072d7a86a555440b8644))
+
+
+### Performance Improvements
+
+* **download-results:** stream summary.csv incrementally instead of rewriting per row ([a470e41](https://github.com/boltz-bio/boltz-api-cli/commit/a470e41ba8aec7ebba48d74e8fb5d6d221bb825f))
+
+
+### Refactors
+
+* **download-results:** drop created_at from summary.csv ([cc9f509](https://github.com/boltz-bio/boltz-api-cli/commit/cc9f509ac6a6ab85661de698f8aa96a50d78c467))
+* **download-results:** scope CSV to small-molecule summary ([afcef00](https://github.com/boltz-bio/boltz-api-cli/commit/afcef0098e8565546eb6472775b9ec4cde29e93b))
+
 ## 0.28.0 (2026-06-05)
 
 Full Changelog: [v0.27.1...v0.28.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.27.1...v0.28.0)
