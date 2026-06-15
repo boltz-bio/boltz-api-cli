@@ -220,74 +220,6 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 	},
 })
 
-var predictionsStructureAndBindingTokenCount = requestflag.WithInnerFlags(cli.Command{
-	Name:    "token-count",
-	Usage:   "Returns the total token count for a prospective Boltz2 complex along with the\nmaximum token count the caller's compute config will accept. Pure introspection\n— never rejects when the complex is too large; still rejects on malformed inputs\nthe model could not interpret. Use the sandbox prediction endpoint if you need\nthe cap enforced.",
-	Suggest: true,
-	Flags: []cli.Flag{
-		&requestflag.Flag[map[string]any]{
-			Name:     "input",
-			Required: true,
-			BodyPath: "input",
-		},
-		&requestflag.Flag[string]{
-			Name:     "model",
-			Usage:    "Model to use for prediction",
-			Default:  "boltz-2.1",
-			Const:    true,
-			BodyPath: "model",
-		},
-		&requestflag.Flag[string]{
-			Name:     "idempotency-key",
-			Usage:    "Client-provided key to prevent duplicate submissions on retries",
-			BodyPath: "idempotency_key",
-		},
-		&requestflag.Flag[string]{
-			Name:     "workspace-id",
-			Usage:    "Target workspace ID (admin keys only; ignored for workspace keys)",
-			BodyPath: "workspace_id",
-		},
-	},
-	Action:          handlePredictionsStructureAndBindingTokenCount,
-	HideHelpCommand: true,
-}, map[string][]requestflag.HasOuterFlag{
-	"input": {
-		&requestflag.InnerFlag[[]map[string]any]{
-			Name:       "input.entities",
-			Usage:      "Entities (proteins, RNA, DNA, ligands) forming the complex to predict. Order determines chain assignment.",
-			InnerField: "entities",
-		},
-		&requestflag.InnerFlag[map[string]any]{
-			Name:       "input.binding",
-			InnerField: "binding",
-		},
-		&requestflag.InnerFlag[[]map[string]any]{
-			Name:       "input.bonds",
-			Usage:      "Bond constraints between atoms. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
-			InnerField: "bonds",
-		},
-		&requestflag.InnerFlag[[]map[string]any]{
-			Name:       "input.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
-			InnerField: "constraints",
-		},
-		&requestflag.InnerFlag[map[string]any]{
-			Name:       "input.model-options",
-			InnerField: "model_options",
-		},
-		&requestflag.InnerFlag[int64]{
-			Name:       "input.num-samples",
-			Usage:      "Number of structure samples to generate",
-			InnerField: "num_samples",
-		},
-		&requestflag.InnerFlag[[]map[string]any]{
-			Name:       "input.templates",
-			Usage:      "Template structure files to guide protein-chain prediction. Supports up to 4 CIF or PDB templates from HTTPS URLs or base64 uploads. Use template_chains to map request chains to template-file chains.",
-			InnerField: "templates",
-		},
-	},
-})
-
 func handlePredictionsStructureAndBindingRetrieve(ctx context.Context, cmd *cli.Command) error {
 	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
 	unusedArgs := cmd.Args().Slice()
@@ -512,47 +444,6 @@ func handlePredictionsStructureAndBindingStart(ctx context.Context, cmd *cli.Com
 		Format:         format,
 		RawOutput:      cmd.Root().Bool("raw-output"),
 		Title:          "predictions:structure-and-binding start",
-		Transform:      transform,
-	})
-}
-
-func handlePredictionsStructureAndBindingTokenCount(ctx context.Context, cmd *cli.Command) error {
-	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
-	unusedArgs := cmd.Args().Slice()
-
-	if len(unusedArgs) > 0 {
-		return fmt.Errorf("Unexpected extra arguments: %v", unusedArgs)
-	}
-
-	options, err := flagOptions(
-		cmd,
-		apiquery.NestedQueryFormatBrackets,
-		apiquery.ArrayQueryFormatRepeat,
-		ApplicationJSON,
-		false,
-	)
-	if err != nil {
-		return err
-	}
-
-	params := boltzapi.PredictionStructureAndBindingTokenCountParams{}
-
-	var res []byte
-	options = append(options, option.WithResponseBodyInto(&res))
-	_, err = client.Predictions.StructureAndBinding.TokenCount(ctx, params, options...)
-	if err != nil {
-		return err
-	}
-
-	obj := gjson.ParseBytes(res)
-	format := cmd.Root().String("format")
-	explicitFormat := cmd.Root().IsSet("format")
-	transform := cmd.Root().String("transform")
-	return ShowJSON(obj, ShowJSONOpts{
-		ExplicitFormat: explicitFormat,
-		Format:         format,
-		RawOutput:      cmd.Root().Bool("raw-output"),
-		Title:          "predictions:structure-and-binding token-count",
 		Transform:      transform,
 	})
 }
