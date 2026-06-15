@@ -84,6 +84,46 @@ var predictionsAdmeDeleteData = cli.Command{
 	HideHelpCommand: true,
 }
 
+var predictionsAdmeEstimateCost = requestflag.WithInnerFlags(cli.Command{
+	Name:    "estimate-cost",
+	Usage:   "Estimate the cost of an ADME prediction without creating any resource or\nconsuming GPU.",
+	Suggest: true,
+	Flags: []cli.Flag{
+		&requestflag.Flag[map[string]any]{
+			Name:     "input",
+			Required: true,
+			BodyPath: "input",
+		},
+		&requestflag.Flag[string]{
+			Name:     "model",
+			Usage:    "Model to use for prediction",
+			Default:  "adme-v1",
+			Const:    true,
+			BodyPath: "model",
+		},
+		&requestflag.Flag[string]{
+			Name:     "idempotency-key",
+			Usage:    "Client-provided key to prevent duplicate submissions on retries",
+			BodyPath: "idempotency_key",
+		},
+		&requestflag.Flag[string]{
+			Name:     "workspace-id",
+			Usage:    "Target workspace ID (admin keys only; ignored for workspace keys)",
+			BodyPath: "workspace_id",
+		},
+	},
+	Action:          handlePredictionsAdmeEstimateCost,
+	HideHelpCommand: true,
+}, map[string][]requestflag.HasOuterFlag{
+	"input": {
+		&requestflag.InnerFlag[[]map[string]any]{
+			Name:       "input.molecules",
+			Usage:      "Molecules to score. Results are returned in the same order as this list.",
+			InnerField: "molecules",
+		},
+	},
+})
+
 var predictionsAdmeStart = requestflag.WithInnerFlags(cli.Command{
 	Name:    "start",
 	Usage:   "Submit a prediction job that returns Tier 1 ADME summary values for each\nrequested molecule.",
@@ -266,6 +306,47 @@ func handlePredictionsAdmeDeleteData(ctx context.Context, cmd *cli.Command) erro
 		Format:         format,
 		RawOutput:      cmd.Root().Bool("raw-output"),
 		Title:          "predictions:adme delete-data",
+		Transform:      transform,
+	})
+}
+
+func handlePredictionsAdmeEstimateCost(ctx context.Context, cmd *cli.Command) error {
+	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
+	unusedArgs := cmd.Args().Slice()
+
+	if len(unusedArgs) > 0 {
+		return fmt.Errorf("Unexpected extra arguments: %v", unusedArgs)
+	}
+
+	options, err := flagOptions(
+		cmd,
+		apiquery.NestedQueryFormatBrackets,
+		apiquery.ArrayQueryFormatRepeat,
+		ApplicationJSON,
+		false,
+	)
+	if err != nil {
+		return err
+	}
+
+	params := boltzapi.PredictionAdmeEstimateCostParams{}
+
+	var res []byte
+	options = append(options, option.WithResponseBodyInto(&res))
+	_, err = client.Predictions.Adme.EstimateCost(ctx, params, options...)
+	if err != nil {
+		return err
+	}
+
+	obj := gjson.ParseBytes(res)
+	format := cmd.Root().String("format")
+	explicitFormat := cmd.Root().IsSet("format")
+	transform := cmd.Root().String("transform")
+	return ShowJSON(obj, ShowJSONOpts{
+		ExplicitFormat: explicitFormat,
+		Format:         format,
+		RawOutput:      cmd.Root().Bool("raw-output"),
+		Title:          "predictions:adme estimate-cost",
 		Transform:      transform,
 	})
 }
