@@ -104,6 +104,7 @@ func init() {
 					&predictionsAdmeRetrieve,
 					&predictionsAdmeList,
 					&predictionsAdmeDeleteData,
+					&predictionsAdmeEstimateCost,
 					&predictionsAdmeStart,
 				},
 			},

@@ -72,6 +72,58 @@ func TestStructuredIncludeObjectFlagSubprocess(t *testing.T) {
 	require.Equal(t, "SEQ", entity["value"])
 }
 
+func TestAdmeEstimateCostSubprocess(t *testing.T) {
+	binary := buildCLIBinary(t)
+	env := authProcessEnv(t)
+
+	var capturedMethod string
+	var capturedPath string
+	var capturedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		capturedMethod = r.Method
+		capturedPath = r.URL.Path
+		capturedBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cost":1,"billable_cost":1,"breakdown":{"application":"adme","cost":1,"billable_cost":1}}`))
+	}))
+	defer server.Close()
+
+	result := runCLI(
+		t,
+		binary,
+		env,
+		"--api-key", "test-key",
+		"--base-url", server.URL,
+		"--format", "raw",
+		"predictions:adme", "estimate-cost",
+		"--input.molecules", `[{smiles: CCO, id: ethanol}]`,
+		"--model", "adme-v1",
+		"--workspace-id", "workspace-from-flag",
+		"--idempotency-key", "idempotency-from-flag",
+	)
+	require.Equal(t, 0, result.ExitCode, result.Stderr)
+	require.Equal(t, http.MethodPost, capturedMethod)
+	require.Equal(t, "/compute/v1/predictions/adme/estimate-cost", capturedPath)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(capturedBody, &body))
+	require.Equal(t, "adme-v1", body["model"])
+	require.Equal(t, "workspace-from-flag", body["workspace_id"])
+	require.Equal(t, "idempotency-from-flag", body["idempotency_key"])
+
+	input, ok := body["input"].(map[string]any)
+	require.True(t, ok)
+	molecules, ok := input["molecules"].([]any)
+	require.True(t, ok)
+	require.Len(t, molecules, 1)
+	molecule, ok := molecules[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "CCO", molecule["smiles"])
+	require.Equal(t, "ethanol", molecule["id"])
+}
+
 func TestMergedInputFlagSubprocess(t *testing.T) {
 	binary := buildCLIBinary(t)
 	env := authProcessEnv(t)

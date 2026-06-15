@@ -50,6 +50,54 @@ func TestPredictionsAdmeDeleteData(t *testing.T) {
 	})
 }
 
+func TestPredictionsAdmeEstimateCost(t *testing.T) {
+	t.Skip("Mock server tests are disabled")
+	t.Run("regular flags", func(t *testing.T) {
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"predictions:adme", "estimate-cost",
+			"--input", "{molecules: [{smiles: x, id: x}]}",
+			"--model", "adme-v1",
+			"--idempotency-key", "idempotency_key",
+			"--workspace-id", "workspace_id",
+		)
+	})
+
+	t.Run("inner flags", func(t *testing.T) {
+		// Check that inner flags have been set up correctly
+		requestflag.CheckInnerFlags(predictionsAdmeEstimateCost)
+
+		// Alternative argument passing style using inner flags
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"predictions:adme", "estimate-cost",
+			"--input.molecules", "[{smiles: x, id: x}]",
+			"--model", "adme-v1",
+			"--idempotency-key", "idempotency_key",
+			"--workspace-id", "workspace_id",
+		)
+	})
+
+	t.Run("piping data", func(t *testing.T) {
+		// Test piping YAML data over stdin
+		pipeData := []byte("" +
+			"input:\n" +
+			"  molecules:\n" +
+			"    - smiles: x\n" +
+			"      id: x\n" +
+			"model: adme-v1\n" +
+			"idempotency_key: idempotency_key\n" +
+			"workspace_id: workspace_id\n")
+		mocktest.TestRunMockTestWithPipeAndFlags(
+			t, pipeData,
+			"--api-key", "string",
+			"predictions:adme", "estimate-cost",
+		)
+	})
+}
+
 func TestPredictionsAdmeStart(t *testing.T) {
 	t.Skip("Mock server tests are disabled")
 	t.Run("regular flags", func(t *testing.T) {
