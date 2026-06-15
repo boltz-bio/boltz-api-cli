@@ -94,6 +94,7 @@ func init() {
 					&predictionsStructureAndBindingDeleteData,
 					&predictionsStructureAndBindingEstimateCost,
 					&predictionsStructureAndBindingStart,
+					&predictionsStructureAndBindingTokenCount,
 				},
 			},
 			{
