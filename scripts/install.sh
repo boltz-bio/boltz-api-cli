@@ -45,8 +45,8 @@ case "$(uname -s)" in
 esac
 
 case "$os" in
-  macos) config_file="${HOME}/Library/Application Support/boltz-compute/config.yaml" ;;
-  linux) config_file="${XDG_CONFIG_HOME:-${HOME}/.config}/boltz-compute/config.yaml" ;;
+  macos) config_file="${HOME}/Library/Application Support/boltz-api/config.yaml" ;;
+  linux) config_file="${XDG_CONFIG_HOME:-${HOME}/.config}/boltz-api/config.yaml" ;;
 esac
 
 warn_existing_config() {

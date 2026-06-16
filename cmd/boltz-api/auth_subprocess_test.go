@@ -223,7 +223,7 @@ func authProcessEnv(t *testing.T) []string {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	t.Setenv("XDG_CACHE_HOME", home)
-	t.Setenv("BOLTZ_COMPUTE_TEST_DISABLE_KEYRING", "1")
+	t.Setenv("BOLTZ_API_TEST_DISABLE_KEYRING", "1")
 	authstore.SetKeyringBackend(subprocessTestKeyringBackend{
 		get: func(service, key string) (string, error) {
 			return "", errors.New("keyring unavailable")
@@ -242,7 +242,7 @@ func authProcessEnv(t *testing.T) []string {
 		"HOME="+home,
 		"XDG_CONFIG_HOME="+home,
 		"XDG_CACHE_HOME="+home,
-		"BOLTZ_COMPUTE_TEST_DISABLE_KEYRING=1",
+		"BOLTZ_API_TEST_DISABLE_KEYRING=1",
 	)
 	return env
 }

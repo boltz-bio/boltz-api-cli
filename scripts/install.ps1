@@ -26,7 +26,7 @@ function Get-ConfigFilePath {
     if (-not $base) {
         $base = Join-Path $HOME ".config"
     }
-    Join-Path (Join-Path $base "boltz-compute") "config.yaml"
+    Join-Path (Join-Path $base "boltz-api") "config.yaml"
 }
 
 function Get-YamlScalar($Content, $Key) {
