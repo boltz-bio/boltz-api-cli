@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.31.0 (2026-06-16)
+
+Full Changelog: [v0.30.0...v0.31.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.30.0...v0.31.0)
+
+### Features
+
+* **compute-api:** add ADME estimate-cost endpoint ([7ebda2f](https://github.com/boltz-bio/boltz-api-cli/commit/7ebda2f166f05adc1ee20ec64fcf7312147282c9))
+* **compute-api:** rename public pipeline identifiers ([7aba459](https://github.com/boltz-bio/boltz-api-cli/commit/7aba45920e769f43f5d638f74158dd8e839de836))
+
+
+### Bug Fixes
+
+* **boltz2:** route to H100 based on token count, not polymer residues ([004c147](https://github.com/boltz-bio/boltz-api-cli/commit/004c147c0ff84bef7c3d4b24baeb9662519a7434))
+* **compute-api:** raise Boltz2 sampling steps minimum ([e77e609](https://github.com/boltz-bio/boltz-api-cli/commit/e77e609390dcb33c84d0e81a4bff1935f3f2da12))
+* **compute-api:** remove public model codenames ([3d93517](https://github.com/boltz-bio/boltz-api-cli/commit/3d93517adb512a77d7714273eb36133ab1246083))
+* **sm-screen:** batch molecule filtering to avoid 60s Python timeout ([32ced8a](https://github.com/boltz-bio/boltz-api-cli/commit/32ced8abb35a651fa6136fad83609f72a4aa02e1))
+
+
+### Chores
+
+* **internal:** version bump ([4203ef9](https://github.com/boltz-bio/boltz-api-cli/commit/4203ef97659ed96b825006db01aa4277b6c88f9c))
+
+
+### Documentation
+
+* **api:** fix runnable predictions example + document request limits ([cc03f02](https://github.com/boltz-bio/boltz-api-cli/commit/cc03f0213e0755e164db9858e107680e2e1c4ea0))
+* **api:** use ASCII hyphens in limit descriptions ([d24d4ed](https://github.com/boltz-bio/boltz-api-cli/commit/d24d4edbeacb741f09a233284fd551eb9b5bb4c7))
+
 ## 0.30.0 (2026-06-16)
 
 Full Changelog: [v0.29.1...v0.30.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.29.1...v0.30.0)
