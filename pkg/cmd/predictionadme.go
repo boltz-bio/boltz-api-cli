@@ -118,7 +118,7 @@ var predictionsAdmeEstimateCost = requestflag.WithInnerFlags(cli.Command{
 	"input": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.molecules",
-			Usage:      "Molecules to score. Results are returned in the same order as this list.",
+			Usage:      "Molecules to score (1–128 per request). Results are returned in the same order as this list.",
 			InnerField: "molecules",
 		},
 	},
@@ -158,7 +158,7 @@ var predictionsAdmeStart = requestflag.WithInnerFlags(cli.Command{
 	"input": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.molecules",
-			Usage:      "Molecules to score. Results are returned in the same order as this list.",
+			Usage:      "Molecules to score (1–128 per request). Results are returned in the same order as this list.",
 			InnerField: "molecules",
 		},
 	},
