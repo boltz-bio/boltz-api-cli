@@ -1,8 +1,8 @@
 # Boltz CLI
 
-The official CLI for the [Boltz REST API](https://api.boltz.bio/docs).
-
-It is generated with [Stainless](https://www.stainless.com/).
+The official command-line tool for the [Boltz API](https://api.boltz.bio/docs).
+Use it to authenticate, submit molecular modeling jobs, and download results
+from a terminal, script, or coding-agent workflow.
 
 <!-- x-release-please-start-version -->
 
@@ -45,7 +45,7 @@ curl -fsSL https://install.boltz.bio/boltz-api/install.sh | BOLTZ_API_VERSION=0.
 $env:BOLTZ_API_VERSION = "0.29.0"; irm https://install.boltz.bio/boltz-api/install.ps1 | iex
 ```
 
-### Installing with Go
+### Build from source with Go
 
 To build from source, you need [Go](https://go.dev/doc/install) version 1.25 or later installed.
 
@@ -67,30 +67,6 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 <!-- x-release-please-end -->
 
-### Running Locally
-
-After cloning the git repository for this project, you can use the
-`scripts/run` script to run the tool locally:
-
-```sh
-./scripts/run args...
-```
-
-### Customization Model
-
-Custom CLI extensions should follow one path:
-
-- add commands, global flags, and command-tree rewrites through `pkg/cmd/custom_apply.go`
-- keep Boltz-specific hand-written command code in `pkg/cmd/custom_*.go`
-- avoid editing generated resource command files
-
-Cross-cutting generated behavior is intentionally limited to three temporary seam
-files: `pkg/cmd/cmd.go`, `pkg/cmd/cmdutil.go`, and `cmd/boltz-api/main.go`.
-Everything else in `pkg/cmd` should be either generated from Stainless or part
-of the small non-generated runtime allowlist already in the repo. New custom
-behavior should follow the `custom_*.go` pattern rather than add logic to
-generated commands directly.
-
 ## Usage
 
 The CLI follows a resource-based command structure:
@@ -99,14 +75,29 @@ The CLI follows a resource-based command structure:
 boltz-api [resource] <command> [flags...]
 ```
 
+For example, start a structure-and-binding prediction from a YAML input file:
+
 ```sh
 boltz-api predictions:structure-and-binding start \
-  --api-key 'My API Key' \
-  --input '{entities: [{chain_ids: [string], type: protein, value: value}]}' \
+  --input @yaml://./prediction-input.yaml \
   --model boltz-2.1
 ```
 
-For details about specific commands, use the `--help` flag.
+For commands that should wait for completion and download results, use the
+resource's `run` command:
+
+```sh
+boltz-api predictions:structure-and-binding run \
+  --input @yaml://./prediction-input.yaml \
+  --model boltz-2.1 \
+  --name aspirin-check
+```
+
+Use `--help` on any command to see its available flags:
+
+```sh
+boltz-api predictions:structure-and-binding start --help
+```
 
 ### Environment variables
 
@@ -114,7 +105,8 @@ For details about specific commands, use the `--help` flag.
 | -------------------- | -------- | ------------- |
 | `BOLTZ_API_KEY`      | no       | `null`        |
 
-OAuth mode can also be configured with:
+Set `BOLTZ_API_KEY` for API-key authentication. OAuth authentication can also be
+configured with:
 
 - `BOLTZ_COMPUTE_AUTH_ISSUER_URL`
 - `BOLTZ_COMPUTE_AUTH_CLIENT_ID`
@@ -156,8 +148,7 @@ The CLI supports API-key mode and OAuth bearer-token mode. When `--api-key` or
 stored OAuth session if one matches the configured issuer, client ID, audience,
 and scopes.
 
-Use API-key mode for CI and agent automation. The stored OAuth session is a
-human login flow with local state, refresh, and browser/loopback behavior.
+Use API keys for CI and automation. Use OAuth for interactive local sessions.
 
 Start a login flow with:
 
@@ -186,12 +177,6 @@ By default, OAuth login uses Boltz's first-party OAuth configuration:
 - scopes: `openid offline_access profile email compute:run`
 - audience/resource: `boltz-compute-api`
 - loopback callback: `http://127.0.0.1:8421/oauth/callback`
-
-For local development against a locally running Lab backend, override the issuer:
-
-```sh
-BOLTZ_COMPUTE_AUTH_ISSUER_URL='http://localhost:3000' boltz-api auth login
-```
 
 Available auth commands:
 
@@ -244,7 +229,7 @@ Refresh tokens are stored in the OS keychain when available, with a fallback to:
 
 - `~/.config/boltz-compute/credentials.json`
 
-### Local download helpers
+### Run and download results
 
 Resource `run` commands start a remote job, wait for completion, and write the local run directory path to stdout.
 They accept the same request flags as `start`, plus local output flags such as `--name`, `--run-dir`, `--root-dir`,
@@ -264,18 +249,15 @@ dotted keys; slices are encoded as JSON strings). By default, pipeline downloads
 extracts it, and adds local artifact paths to the manifest. Use `--download-mode metadata_only` to
 write only the manifest metadata.
 
-Structure prediction run IDs now use the `sab_pred` prefix. Historical `pred_` IDs are still supported.
-
 Examples:
 
 ```sh
-boltz-api predictions:structure-and-binding run --input @json://prediction-input.json --name example-prediction
-boltz-api predictions:adme run --input @json://adme-input.json --name adme-run
-boltz-api protein:design run --input @json://protein-design-input.json --name protein-run
+boltz-api predictions:structure-and-binding run --input @yaml://./prediction-input.yaml --name example-prediction
+boltz-api predictions:adme run --input @json://./adme-input.json --name adme-run
+boltz-api protein:design run --input @json://./protein-design-input.json --name protein-run
 boltz-api download-results --id sab_pred_123
 boltz-api download-results --id sab_pred_123 --name example-run
 boltz-api download-results --name example-run
-boltz-api download-results --id pred_123 --name legacy-run
 boltz-api download-results --id prot_des_123 --name batch-run
 boltz-api download-results --id prot_des_123 --name batch-run-light --download-mode metadata_only
 boltz-api download-results --id sab_pred_123 --name human-run --progress-format text --verbose
@@ -291,34 +273,21 @@ By default, `download-results` emits machine-readable JSON Lines progress events
 
 ### Passing files as arguments
 
-To inline file contents into request values, you can use the `@myfile.ext`
-syntax:
-
-```bash
-boltz-api <command> --arg @abe.jpg
-```
-
-Files can also be passed inside JSON or YAML blobs:
-
-```bash
-boltz-api <command> --arg '{image: "@abe.jpg"}'
-# Equivalent:
-boltz-api <command> <<YAML
-arg:
-  image: "@abe.jpg"
-YAML
-```
+For API fields that accept file contents, prefix a local path with `@` and the
+CLI reads the file before sending the request. The same syntax works inside JSON
+or YAML values, for example `{"file_field": "@myfile.ext"}`.
 
 To parse a file as structured JSON or YAML and inject the parsed object or
 array, use `@json://...` or `@yaml://...`:
 
-```bash
+```sh
 boltz-api predictions:structure-and-binding start \
-  --input @json:///tmp/input.json
+  --input @yaml://./prediction-input.yaml \
+  --model boltz-2.1
 
 boltz-api predictions:structure-and-binding start <<'YAML'
 input:
-  entities: "@yaml:///tmp/entities.yaml"
+  entities: "@yaml://./entities.yaml"
 model: boltz-2.1
 YAML
 ```
@@ -326,8 +295,8 @@ YAML
 If you need to pass a string literal that begins with an `@` sign, you can
 escape the `@` sign to avoid accidentally passing a file.
 
-```bash
-boltz-api <command> --username '\@abe'
+```sh
+boltz-api admin:workspaces create --name '\@example'
 ```
 
 #### Explicit encoding
@@ -342,10 +311,6 @@ to parse the referenced file and inject structured data. Note that absolute
 paths will begin with `@file://`, `@data://`, `@json://`, or `@yaml://`,
 followed by a third `/` (for example, `@file:///tmp/file.txt`).
 
-```bash
-boltz-api <command> --arg @data://file.txt
-```
-
 ### Structured input for design and screen commands
 
 For small-molecule/protein design and library-screen create or estimate
@@ -353,7 +318,7 @@ commands, prefer a single top-level `--input` value. The CLI merges that object
 into the request body, so `idempotency_key` and `workspace_id` can still stay as
 their own top-level flags:
 
-```bash
+```sh
 boltz-api small-molecule:library-screen start \
   --input @json:///tmp/input.json \
   --idempotency-key req_123 \
@@ -364,10 +329,10 @@ boltz-api protein:design start \
   --idempotency-key req_123
 ```
 
-Legacy per-field flags still work and can override fields from `--input` when
-you want to tweak part of a payload:
+Field-specific flags can override fields from `--input` when you want to tweak
+part of a payload:
 
-```bash
+```sh
 boltz-api small-molecule:library-screen start \
   --input @json:///tmp/input.json \
   --target @json:///tmp/target-override.json
@@ -384,10 +349,11 @@ boltz-api protein:library-screen start \
 ```
 
 When piping JSON or YAML on stdin, the CLI merges that data onto the HTTP
-request body, so you must use API body field names, not singular legacy CLI
-flag names:
+request body, so use API body field names. For example, use `molecules` or
+`proteins` in stdin payloads rather than the repeatable flag names `--molecule`
+or `--protein`:
 
-```bash
+```sh
 boltz-api small-molecule:library-screen start <<'YAML'
 molecules:
   - smiles: CCO
@@ -413,7 +379,7 @@ use `--format raw`, in which case it runs on the full response page.
 
 Examples:
 
-```bash
+```sh
 # Per-item extraction on list output
 boltz-api small-molecule:library-screen list-results \
   --id sm_scr_123 \
@@ -427,23 +393,3 @@ boltz-api small-molecule:library-screen list-results \
 
 Array-root expressions such as `#.{...}` are not the right tool in streamed
 per-item mode.
-
-## Linking different Go SDK versions
-
-You can link the CLI against a different version of the Boltz Go SDK
-for development purposes using the `./scripts/link` script.
-
-To link to a specific version from a repository (version can be a branch,
-git tag, or commit hash):
-
-```bash
-./scripts/link github.com/org/repo@version
-```
-
-To link to a local copy of the SDK:
-
-```bash
-./scripts/link ../path/to/boltzapi-go
-```
-
-If you run the link script without any arguments, it will default to `../boltzapi-go`.
