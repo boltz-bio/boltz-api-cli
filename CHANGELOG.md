@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.30.0 (2026-06-16)
+
+Full Changelog: [v0.29.1...v0.30.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.29.1...v0.30.0)
+
+### Features
+
+* **compute-api:** cap pending predictions per org and workspace ([2835be7](https://github.com/boltz-bio/boltz-api-cli/commit/2835be7d72d91946ec4aa0d1fde0560118cc6c54))
+* **compute:** accept legacy Boltz template inputs ([2519099](https://github.com/boltz-bio/boltz-api-cli/commit/2519099bbbe8626f42fab49548442bae9aa12c36))
+* **compute:** canonicalize Boltz template inputs ([c2c03cb](https://github.com/boltz-bio/boltz-api-cli/commit/c2c03cbea7e9cf42a936d1b94c9321f3f4f6ab77))
+
+
+### Chores
+
+* **internal:** codegen related update ([6c47576](https://github.com/boltz-bio/boltz-api-cli/commit/6c4757694f5480a39f3d3da80dbfc24c1bae3335))
+
 ## 0.29.1 (2026-06-16)
 
 Full Changelog: [v0.29.0...v0.29.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.29.0...v0.29.1)
