@@ -141,7 +141,7 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 		},
 		&requestflag.InnerFlag[int64]{
 			Name:       "input.num-samples",
-			Usage:      "Number of structure samples to generate",
+			Usage:      "Number of structure samples to generate (1–10)",
 			InnerField: "num_samples",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
@@ -209,7 +209,7 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 		},
 		&requestflag.InnerFlag[int64]{
 			Name:       "input.num-samples",
-			Usage:      "Number of structure samples to generate",
+			Usage:      "Number of structure samples to generate (1–10)",
 			InnerField: "num_samples",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
