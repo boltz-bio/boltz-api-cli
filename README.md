@@ -108,16 +108,16 @@ boltz-api predictions:structure-and-binding start --help
 Set `BOLTZ_API_KEY` for API-key authentication. OAuth authentication can also be
 configured with:
 
-- `BOLTZ_COMPUTE_AUTH_ISSUER_URL`
-- `BOLTZ_COMPUTE_AUTH_CLIENT_ID`
-- `BOLTZ_COMPUTE_AUTH_SCOPE` (comma-separated)
-- `BOLTZ_COMPUTE_AUTH_AUDIENCE`
-- `BOLTZ_COMPUTE_AUTH_AUTHORIZATION_URL`
-- `BOLTZ_COMPUTE_AUTH_TOKEN_URL`
-- `BOLTZ_COMPUTE_AUTH_USERINFO_URL`
-- `BOLTZ_COMPUTE_AUTH_REVOCATION_URL`
-- `BOLTZ_COMPUTE_ORG`
-- `BOLTZ_COMPUTE_LISTEN_PORT`
+- `BOLTZ_API_AUTH_ISSUER_URL`
+- `BOLTZ_API_AUTH_CLIENT_ID`
+- `BOLTZ_API_AUTH_SCOPE` (comma-separated)
+- `BOLTZ_API_AUTH_AUDIENCE`
+- `BOLTZ_API_AUTH_AUTHORIZATION_URL`
+- `BOLTZ_API_AUTH_TOKEN_URL`
+- `BOLTZ_API_AUTH_USERINFO_URL`
+- `BOLTZ_API_AUTH_REVOCATION_URL`
+- `BOLTZ_API_ORG`
+- `BOLTZ_API_LISTEN_PORT`
 
 ### Global flags
 
@@ -133,7 +133,7 @@ configured with:
 - `--auth-issuer-url` - OIDC issuer URL used for OAuth login and bearer-token refresh
 - `--auth-client-id` - OAuth client ID for public-client login
 - `--auth-scope` - OAuth scope to request (repeatable)
-- `--auth-audience` - OAuth audience/resource to request for compute access
+- `--auth-audience` - OAuth audience/resource to request during login
 - `--auth-authorization-url` - Override the discovered authorization endpoint
 - `--auth-token-url` - Override the discovered token endpoint
 - `--auth-userinfo-url` - Override the discovered userinfo endpoint
@@ -220,14 +220,14 @@ boltz-api --format json auth wait --timeout 60s --poll-interval 2s
 issuer or client ID looks like a placeholder. The CLI stores non-secret auth
 configuration in:
 
-- macOS: `~/Library/Application Support/boltz-compute/config.yaml`
-- Linux: `~/.config/boltz-compute/config.yaml`
-- Windows: `%APPDATA%\boltz-compute\config.yaml`
-- `~/.cache/boltz-compute/session.json`
+- macOS: `~/Library/Application Support/boltz-api/config.yaml`
+- Linux: `~/.config/boltz-api/config.yaml`
+- Windows: `%APPDATA%\boltz-api\config.yaml`
+- `~/.cache/boltz-api/session.json`
 
 Refresh tokens are stored in the OS keychain when available, with a fallback to:
 
-- `~/.config/boltz-compute/credentials.json`
+- `~/.config/boltz-api/credentials.json`
 
 ### Run and download results
 

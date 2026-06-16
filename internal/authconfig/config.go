@@ -13,16 +13,16 @@ import (
 
 const (
 	ConfigVersion           = 1
-	EnvAuthIssuerURL        = "BOLTZ_COMPUTE_AUTH_ISSUER_URL"
-	EnvAuthClientID         = "BOLTZ_COMPUTE_AUTH_CLIENT_ID"
-	EnvAuthScope            = "BOLTZ_COMPUTE_AUTH_SCOPE"
-	EnvAuthAudience         = "BOLTZ_COMPUTE_AUTH_AUDIENCE"
-	EnvAuthAuthorizationURL = "BOLTZ_COMPUTE_AUTH_AUTHORIZATION_URL"
-	EnvAuthTokenURL         = "BOLTZ_COMPUTE_AUTH_TOKEN_URL"
-	EnvAuthUserInfoURL      = "BOLTZ_COMPUTE_AUTH_USERINFO_URL"
-	EnvAuthRevocationURL    = "BOLTZ_COMPUTE_AUTH_REVOCATION_URL"
-	EnvOrg                  = "BOLTZ_COMPUTE_ORG"
-	EnvListenPort           = "BOLTZ_COMPUTE_LISTEN_PORT"
+	EnvAuthIssuerURL        = "BOLTZ_API_AUTH_ISSUER_URL"
+	EnvAuthClientID         = "BOLTZ_API_AUTH_CLIENT_ID"
+	EnvAuthScope            = "BOLTZ_API_AUTH_SCOPE"
+	EnvAuthAudience         = "BOLTZ_API_AUTH_AUDIENCE"
+	EnvAuthAuthorizationURL = "BOLTZ_API_AUTH_AUTHORIZATION_URL"
+	EnvAuthTokenURL         = "BOLTZ_API_AUTH_TOKEN_URL"
+	EnvAuthUserInfoURL      = "BOLTZ_API_AUTH_USERINFO_URL"
+	EnvAuthRevocationURL    = "BOLTZ_API_AUTH_REVOCATION_URL"
+	EnvOrg                  = "BOLTZ_API_ORG"
+	EnvListenPort           = "BOLTZ_API_LISTEN_PORT"
 )
 
 var DefaultScopes = []string{"openid", "offline_access", "profile", "email"}

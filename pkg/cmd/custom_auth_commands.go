@@ -268,10 +268,10 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		return authmode.WrapConfigError(err)
 	}
 	if strings.TrimSpace(resolved.IssuerURL) == "" {
-		return autherror.New("missing_issuer_url", "OAuth issuer URL is required", "Set `--auth-issuer-url` or `BOLTZ_COMPUTE_AUTH_ISSUER_URL`.")
+		return autherror.New("missing_issuer_url", "OAuth issuer URL is required", "Set `--auth-issuer-url` or `BOLTZ_API_AUTH_ISSUER_URL`.")
 	}
 	if strings.TrimSpace(resolved.ClientID) == "" {
-		return autherror.New("missing_client_id", "OAuth client ID is required", "Set `--auth-client-id` or `BOLTZ_COMPUTE_AUTH_CLIENT_ID`.")
+		return autherror.New("missing_client_id", "OAuth client ID is required", "Set `--auth-client-id` or `BOLTZ_API_AUTH_CLIENT_ID`.")
 	}
 	if cmd.Bool("json-events") && !cmd.Bool("device-code") {
 		return autherror.New("unsupported_login_output", "`--json-events` requires `--device-code`", "Use `boltz-api auth login --device-code --json-events`.")

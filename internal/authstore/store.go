@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	productDir          = "boltz-compute"
-	keyringService      = "boltz-compute-cli"
+	productDir          = "boltz-api"
+	keyringService      = "boltz-api-cli"
 	refreshTokenAccount = "oauth-refresh-token"
 	lockRetryDelay      = 50 * time.Millisecond
-	testDisableKeyring  = "BOLTZ_COMPUTE_TEST_DISABLE_KEYRING"
+	testDisableKeyring  = "BOLTZ_API_TEST_DISABLE_KEYRING"
 )
 
 type KeyringBackend interface {
