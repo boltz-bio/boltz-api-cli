@@ -1290,8 +1290,8 @@ func (e *downloadResultsEngine) materializePendingPipelineResults(ctx context.Co
 	}
 
 	workerCount := normalizeDownloadWorkerCount(workers, len(results))
-	workerCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	defer cancelWorkers()
 
 	jobs := make(chan downloadPipelineResultInfo)
 	done := make(chan pipelineResultMaterialization, len(results))
@@ -1302,10 +1302,10 @@ func (e *downloadResultsEngine) materializePendingPipelineResults(ctx context.Co
 		go func() {
 			defer wg.Done()
 			for result := range jobs {
-				materialized, err := e.materializePipelineResultArchive(workerCtx, runDir, metadata, result)
+				materialized, err := e.materializePipelineResultArchive(ctx, runDir, metadata, result)
 				done <- pipelineResultMaterialization{result: materialized, err: err}
 				if err != nil {
-					cancel()
+					cancelWorkers()
 				}
 			}
 		}()
@@ -1333,7 +1333,7 @@ func (e *downloadResultsEngine) materializePendingPipelineResults(ctx context.Co
 		if result.err != nil {
 			if firstErr == nil {
 				firstErr = result.err
-				cancel()
+				cancelWorkers()
 			}
 			continue
 		}
