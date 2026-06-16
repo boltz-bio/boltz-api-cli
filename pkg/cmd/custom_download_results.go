@@ -36,10 +36,12 @@ const (
 	downloadResultsRunFileName        = "run.json"
 	downloadResultsResultMetadataName = "metadata.json"
 	downloadResultsResultIndexName    = "index.jsonl"
+	downloadResultsResultIndexLock    = "index.jsonl.lock"
 	downloadResultsSchemaVersion      = 1
 	downloadResultsPageLimit          = 1000
 	downloadResultsDefaultWorkers     = 32
 	downloadResultsSummaryIntervalSec = 30 * time.Second
+	downloadResultsManifestLockWait   = 30 * time.Second
 	downloadProgressFormatJSONL       = "jsonl"
 	downloadProgressFormatText        = "text"
 	downloadModeEverything            = "everything"
@@ -1738,14 +1740,33 @@ func (m *pipelineResultManifestAppender) appendEntry(entry map[string]any) error
 	if _, ok := m.knownIDs[id]; ok {
 		return nil
 	}
-	if err := appendDownloadJSONLFile(filepath.Join(m.runDir, "results", downloadResultsResultIndexName), entry); err != nil {
-		return err
-	}
-	m.knownIDs[id] = struct{}{}
-	if !isSmallMoleculePipelineRunType(m.runType) {
-		return nil
-	}
-	return m.updateSmallMoleculeSummary(entry)
+
+	indexPath := filepath.Join(m.runDir, "results", downloadResultsResultIndexName)
+	lockPath := filepath.Join(m.runDir, "results", downloadResultsResultIndexLock)
+	return withDownloadFileLock(lockPath, func() error {
+		ids, err := readPipelineResultManifestIDs(m.runDir)
+		if err != nil {
+			if rebuildErr := rebuildPipelineResultManifest(m.runDir, m.runType); rebuildErr != nil {
+				return fmt.Errorf("read result manifest IDs: %w; rebuild failed: %w", err, rebuildErr)
+			}
+			ids, err = readPipelineResultManifestIDs(m.runDir)
+			if err != nil {
+				return err
+			}
+		}
+		m.knownIDs = ids
+		if _, ok := m.knownIDs[id]; ok {
+			return nil
+		}
+		if err := appendDownloadJSONLFile(indexPath, entry); err != nil {
+			return err
+		}
+		m.knownIDs[id] = struct{}{}
+		if !isSmallMoleculePipelineRunType(m.runType) {
+			return nil
+		}
+		return m.updateSmallMoleculeSummary(entry)
+	})
 }
 
 // updateSmallMoleculeSummary keeps results/summary.csv in step with the
@@ -2109,6 +2130,33 @@ func appendDownloadJSONLFile(path string, value map[string]any) error {
 		return err
 	}
 	return appendDownloadJSONL(file, value)
+}
+
+func withDownloadFileLock(path string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(downloadResultsManifestLockWait)
+	for {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			_, _ = fmt.Fprintf(file, "%d\n", os.Getpid())
+			closeErr := file.Close()
+			defer os.Remove(path)
+			if closeErr != nil {
+				return closeErr
+			}
+			return fn()
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("Timed out waiting for download manifest lock: %s", path)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func appendDownloadJSONL(writer io.WriteCloser, value map[string]any) error {

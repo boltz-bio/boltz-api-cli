@@ -674,6 +674,200 @@ func TestPipelineDownloadResultsMetadataOnlySkipsArtifacts(t *testing.T) {
 	assertPipelineResultMetadata(t, runID, manifest[0])
 }
 
+func TestPipelineDownloadResultsDedupeOverlappingFetchedPage(t *testing.T) {
+	setDownloadResultsTestEnv(t)
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	runID := "sm_des_123"
+	runDir := filepath.Join(cwd, downloadResultsDefaultRootDir, "overlap-page")
+	metadata := newDownloadRunMetadata("overlap-page", downloadRunTypeSmallMoleculeDesign, runID, nil, downloadModeMetadataOnly)
+	cursorAfterID := "res_04"
+	metadata.CursorAfterID = &cursorAfterID
+	require.NoError(t, os.MkdirAll(runDir, 0o755))
+	require.NoError(t, saveDownloadMetadata(runDir, metadata))
+	for _, resultID := range []string{"res_00", "res_01", "res_02", "res_03", "res_04"} {
+		require.NoError(t, appendDownloadJSONLFile(filepath.Join(runDir, "results", "index.jsonl"), pipelineResultJSON(runID, resultID)))
+	}
+
+	var artifactRequests atomic.Int32
+	var listAfterIDs []string
+	var listMu sync.Mutex
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/compute/v1/small-molecule/design/" + runID:
+			writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", "res_07", ""))
+		case "/compute/v1/small-molecule/design/" + runID + "/results":
+			require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
+			afterID := r.URL.Query().Get("after_id")
+			listMu.Lock()
+			listAfterIDs = append(listAfterIDs, afterID)
+			listMu.Unlock()
+
+			switch afterID {
+			case "res_04":
+				writeJSON(t, w, pipelineResultsPageJSON(server.URL, runID, "res_02", "res_03", "res_04", "res_05", "res_06", "res_07"))
+			case "res_07":
+				writeJSON(t, w, emptyPipelinePageJSON())
+			default:
+				http.NotFound(w, r)
+			}
+		case "/files/" + runID + "/res_02.tar.gz", "/files/" + runID + "/res_03.tar.gz", "/files/" + runID + "/res_04.tar.gz",
+			"/files/" + runID + "/res_05.tar.gz", "/files/" + runID + "/res_06.tar.gz", "/files/" + runID + "/res_07.tar.gz":
+			artifactRequests.Add(1)
+			_, _ = w.Write([]byte("unexpected"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	stdout, stderr, err := runDownloadResultsCLI(
+		t,
+		"--base-url", server.URL,
+		"--api-key", "test-key",
+		"download-results",
+		"--name", "overlap-page",
+		"--download-mode", "metadata_only",
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, runDir+"\n", stdout)
+	assert.NotEmpty(t, stderr)
+	assert.EqualValues(t, 0, artifactRequests.Load())
+
+	manifest := readDownloadResultsTestJSONL(t, filepath.Join(runDir, "results", "index.jsonl"))
+	require.Len(t, manifest, 8)
+	for i, entry := range manifest {
+		assert.Equal(t, fmt.Sprintf("res_%02d", i), entry["id"])
+	}
+	assert.NoDirExists(t, filepath.Join(runDir, "results", "res_05"))
+
+	metadata = mustLoadDownloadMetadata(t, runDir)
+	require.NotNil(t, metadata.CursorAfterID)
+	assert.Equal(t, "res_07", *metadata.CursorAfterID)
+	assert.Nil(t, metadata.Pending)
+
+	listMu.Lock()
+	defer listMu.Unlock()
+	assert.Equal(t, []string{"res_04", "res_04", "res_07"}, listAfterIDs)
+}
+
+func TestPipelineDownloadResultsDedupeNonContiguousExistingManifest(t *testing.T) {
+	testCases := []struct {
+		name             string
+		fetchedIDs       []string
+		expectedIDs      []string
+		expectedCursorID string
+	}{
+		{
+			name:             "fetched page ends inside later indexed block",
+			fetchedIDs:       []string{"res_06", "res_07", "res_08", "res_09", "res_10"},
+			expectedIDs:      []string{"res_00", "res_01", "res_02", "res_03", "res_04", "res_09", "res_10", "res_11", "res_12", "res_06", "res_07", "res_08"},
+			expectedCursorID: "res_10",
+		},
+		{
+			name:             "fetched page extends past later indexed block",
+			fetchedIDs:       []string{"res_06", "res_07", "res_08", "res_09", "res_10", "res_11", "res_12", "res_13", "res_14"},
+			expectedIDs:      []string{"res_00", "res_01", "res_02", "res_03", "res_04", "res_09", "res_10", "res_11", "res_12", "res_06", "res_07", "res_08", "res_13", "res_14"},
+			expectedCursorID: "res_14",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			setDownloadResultsTestEnv(t)
+			cwd := t.TempDir()
+			t.Chdir(cwd)
+
+			runID := "sm_des_123"
+			runName := strings.ReplaceAll(testCase.name, " ", "-")
+			runDir := filepath.Join(cwd, downloadResultsDefaultRootDir, runName)
+			metadata := newDownloadRunMetadata(runName, downloadRunTypeSmallMoleculeDesign, runID, nil, downloadModeMetadataOnly)
+			cursorAfterID := "res_04"
+			metadata.CursorAfterID = &cursorAfterID
+			require.NoError(t, os.MkdirAll(runDir, 0o755))
+			require.NoError(t, saveDownloadMetadata(runDir, metadata))
+			for _, resultID := range []string{"res_00", "res_01", "res_02", "res_03", "res_04", "res_09", "res_10", "res_11", "res_12"} {
+				require.NoError(t, appendDownloadJSONLFile(filepath.Join(runDir, "results", "index.jsonl"), pipelineResultJSON(runID, resultID)))
+			}
+
+			var artifactRequests atomic.Int32
+			var listAfterIDs []string
+			var listMu sync.Mutex
+
+			var server *httptest.Server
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/compute/v1/small-molecule/design/" + runID:
+					writeJSON(t, w, pipelineGetResponseJSON(runID, "succeeded", "ws_123", testCase.expectedCursorID, ""))
+				case "/compute/v1/small-molecule/design/" + runID + "/results":
+					require.Equal(t, fmt.Sprint(downloadResultsPageLimit), r.URL.Query().Get("limit"))
+					afterID := r.URL.Query().Get("after_id")
+					listMu.Lock()
+					listAfterIDs = append(listAfterIDs, afterID)
+					listMu.Unlock()
+
+					switch afterID {
+					case "res_04":
+						writeJSON(t, w, pipelineResultsPageJSON(server.URL, runID, testCase.fetchedIDs...))
+					case testCase.expectedCursorID:
+						writeJSON(t, w, emptyPipelinePageJSON())
+					default:
+						http.NotFound(w, r)
+					}
+				default:
+					if strings.HasPrefix(r.URL.Path, "/files/") {
+						artifactRequests.Add(1)
+						_, _ = w.Write([]byte("unexpected"))
+						return
+					}
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			stdout, stderr, err := runDownloadResultsCLI(
+				t,
+				"--base-url", server.URL,
+				"--api-key", "test-key",
+				"download-results",
+				"--name", runName,
+				"--download-mode", "metadata_only",
+			)
+			require.NoError(t, err)
+
+			assert.Equal(t, runDir+"\n", stdout)
+			assert.NotEmpty(t, stderr)
+			assert.EqualValues(t, 0, artifactRequests.Load())
+
+			manifest := readDownloadResultsTestJSONL(t, filepath.Join(runDir, "results", "index.jsonl"))
+			require.Len(t, manifest, len(testCase.expectedIDs))
+			seenIDs := map[string]struct{}{}
+			for i, entry := range manifest {
+				id := fmt.Sprint(entry["id"])
+				assert.Equal(t, testCase.expectedIDs[i], id)
+				if _, ok := seenIDs[id]; ok {
+					t.Fatalf("duplicate manifest id %s", id)
+				}
+				seenIDs[id] = struct{}{}
+			}
+			assert.NoDirExists(t, filepath.Join(runDir, "results", "res_06"))
+
+			metadata = mustLoadDownloadMetadata(t, runDir)
+			require.NotNil(t, metadata.CursorAfterID)
+			assert.Equal(t, testCase.expectedCursorID, *metadata.CursorAfterID)
+			assert.Nil(t, metadata.Pending)
+
+			listMu.Lock()
+			defer listMu.Unlock()
+			assert.Equal(t, []string{"res_04", "res_04", testCase.expectedCursorID}, listAfterIDs)
+		})
+	}
+}
+
 func TestPipelineDownloadResultsUsesWorkersForArchiveMaterialization(t *testing.T) {
 	setDownloadResultsTestEnv(t)
 	cwd := t.TempDir()
@@ -916,6 +1110,36 @@ func TestPipelineResultManifestAppenderSkipsPreviouslyIndexedResults(t *testing.
 	require.True(t, ok)
 	assert.Equal(t, "results/res_1/archive.tar.gz", paths["archive"])
 	assert.Equal(t, "results/res_1/files/metrics.json", paths["metrics"])
+}
+
+func TestPipelineResultManifestAppenderConcurrentJoinSkipsDuplicate(t *testing.T) {
+	cwd := t.TempDir()
+	runDir := filepath.Join(cwd, "runs", "concurrent-join")
+
+	for _, resultID := range []string{"res_1", "res_2"} {
+		resultDir := filepath.Join(runDir, "results", resultID)
+		require.NoError(t, os.MkdirAll(filepath.Join(resultDir, "files"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(resultDir, "archive.tar.gz"), []byte("archive"), 0o644))
+		require.NoError(t, savePipelineResultMetadata(resultDir, downloadPipelineResultInfo{
+			ID:       resultID,
+			Metadata: map[string]any{"id": resultID},
+		}))
+	}
+
+	firstProcessManifest := newPipelineResultManifestAppender(runDir, downloadRunTypeProteinDesign)
+	require.NoError(t, firstProcessManifest.appendResult(filepath.Join(runDir, "results", "res_1"), "res_1"))
+
+	// Process #2 joins after res_1 exists, so it caches res_1 but not future IDs.
+	secondProcessManifest := newPipelineResultManifestAppender(runDir, downloadRunTypeProteinDesign)
+	require.NoError(t, secondProcessManifest.appendResult(filepath.Join(runDir, "results", "res_1"), "res_1"))
+
+	require.NoError(t, firstProcessManifest.appendResult(filepath.Join(runDir, "results", "res_2"), "res_2"))
+	require.NoError(t, secondProcessManifest.appendResult(filepath.Join(runDir, "results", "res_2"), "res_2"))
+
+	entries := readDownloadResultsTestJSONL(t, filepath.Join(runDir, "results", "index.jsonl"))
+	require.Len(t, entries, 2)
+	assert.Equal(t, "res_1", entries[0]["id"])
+	assert.Equal(t, "res_2", entries[1]["id"])
 }
 
 func TestAppendDownloadJSONLReturnsCloseErrors(t *testing.T) {
