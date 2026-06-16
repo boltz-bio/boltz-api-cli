@@ -535,11 +535,9 @@ func handlePredictionsStructureAndBindingTokenCount(ctx context.Context, cmd *cl
 		return err
 	}
 
-	params := boltzapi.PredictionStructureAndBindingTokenCountParams{}
-
 	var res []byte
 	options = append(options, option.WithResponseBodyInto(&res))
-	_, err = client.Predictions.StructureAndBinding.TokenCount(ctx, params, options...)
+	err = client.Post(ctx, "/compute/v1/predictions/structure-and-binding/token-count", nil, nil, options...)
 	if err != nil {
 		return err
 	}
