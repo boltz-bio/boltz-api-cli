@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.29.1 (2026-06-16)
+
+Full Changelog: [v0.29.0...v0.29.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.29.0...v0.29.1)
+
+### Documentation
+
+* **cli:** clean up public README ([de93bbc](https://github.com/boltz-bio/boltz-api-cli/commit/de93bbcad22861313ed63bdd81c0e57d7f4f13a3))
+
 ## 0.29.0 (2026-06-15)
 
 Full Changelog: [v0.28.0...v0.29.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.28.0...v0.29.0)
