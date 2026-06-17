@@ -218,16 +218,20 @@ boltz-api --format json auth wait --timeout 60s --poll-interval 2s
 
 `auth status` includes the local config path and warns when the resolved OAuth
 issuer or client ID looks like a placeholder. The CLI stores non-secret auth
-configuration in:
+configuration in the OS user config directory:
 
 - macOS: `~/Library/Application Support/boltz-api/config.yaml`
-- Linux: `~/.config/boltz-api/config.yaml`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/boltz-api/config.yaml`
 - Windows: `%APPDATA%\boltz-api\config.yaml`
-- `~/.cache/boltz-api/session.json`
 
-Refresh tokens are stored in the OS keychain when available, with a fallback to:
+The local OAuth session cache is stored in the OS user cache directory:
 
-- `~/.config/boltz-api/credentials.json`
+- macOS: `~/Library/Caches/boltz-api/session.json`
+- Linux: `${XDG_CACHE_HOME:-~/.cache}/boltz-api/session.json`
+- Windows: `%LocalAppData%\boltz-api\session.json`
+
+Refresh tokens are stored in the OS keychain when available, with a fallback to
+`credentials.json` in the same config directory.
 
 ### Run and download results
 
