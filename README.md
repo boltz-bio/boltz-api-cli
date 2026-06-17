@@ -223,7 +223,8 @@ configuration in:
 - macOS: `~/Library/Application Support/boltz-api/config.yaml`
 - Linux: `~/.config/boltz-api/config.yaml`
 - Windows: `%APPDATA%\boltz-api\config.yaml`
-- `~/.cache/boltz-api/session.json`
+
+The local OAuth session cache is stored at `~/.cache/boltz-api/session.json`.
 
 Refresh tokens are stored in the OS keychain when available, with a fallback to:
 
