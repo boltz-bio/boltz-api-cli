@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.31.1 (2026-06-17)
+
+Full Changelog: [v0.31.0...v0.31.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.31.0...v0.31.1)
+
+### Documentation
+
+* clarify OAuth session cache location ([c1931e7](https://github.com/boltz-bio/boltz-api-cli/commit/c1931e7f8fb1d9c400d6ee18898274190a87bbf6))
+* document OS auth storage paths ([3af019a](https://github.com/boltz-bio/boltz-api-cli/commit/3af019a1e05b789a4b04625b66479343f6bbd5da))
+
 ## 0.31.0 (2026-06-16)
 
 Full Changelog: [v0.30.0...v0.31.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.30.0...v0.31.0)
