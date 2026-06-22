@@ -149,6 +149,11 @@ var proteinLibraryScreenListResults = cli.Command{
 			Usage:     "Return results before this ID",
 			QueryPath: "before_id",
 		},
+		&requestflag.Flag[string]{
+			Name:      "ids",
+			Usage:     "Comma-separated list of result IDs to filter by (max 200). Only results whose ID matches one of these is returned; missing IDs are silently skipped. Composes with `limit`, `after_id`, and `before_id` — the filter is applied before pagination.",
+			QueryPath: "ids",
+		},
 		&requestflag.Flag[int64]{
 			Name:      "limit",
 			Usage:     "Max results to return. Defaults to 100.",

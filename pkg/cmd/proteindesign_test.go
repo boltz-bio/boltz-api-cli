@@ -156,6 +156,7 @@ func TestProteinDesignListResults(t *testing.T) {
 			"--id", "id",
 			"--after-id", "after_id",
 			"--before-id", "before_id",
+			"--ids", "ids",
 			"--limit", "1",
 			"--workspace-id", "workspace_id",
 		)
