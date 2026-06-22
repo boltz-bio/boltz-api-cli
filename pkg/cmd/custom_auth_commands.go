@@ -205,6 +205,7 @@ type authMeResponse struct {
 	KeyType                 string                     `json:"key_type,omitempty"`
 	Mode                    string                     `json:"mode,omitempty"`
 	OrganizationID          string                     `json:"organization_id,omitempty"`
+	OrganizationName        *string                    `json:"organization_name,omitempty"`
 	SelectedOrganizationID  string                     `json:"selected_organization_id,omitempty"`
 	ActiveOrganizationID    string                     `json:"active_organization_id,omitempty"`
 	WorkspaceID             *string                    `json:"workspace_id,omitempty"`
@@ -217,8 +218,9 @@ type authConfigDetails struct {
 }
 
 type authMeOrganizationMember struct {
-	OrganizationID string `json:"organization_id"`
-	Role           string `json:"role"`
+	OrganizationID   string  `json:"organization_id"`
+	OrganizationName *string `json:"organization_name,omitempty"`
+	Role             string  `json:"role"`
 }
 
 type authOrganizationsResponse struct {
@@ -229,10 +231,11 @@ type authOrganizationsResponse struct {
 }
 
 type authOrganizationSummary struct {
-	OrganizationID string `json:"organization_id"`
-	Role           string `json:"role,omitempty"`
-	Selected       bool   `json:"selected"`
-	Switchable     bool   `json:"switchable"`
+	OrganizationID   string  `json:"organization_id"`
+	OrganizationName *string `json:"organization_name,omitempty"`
+	Role             string  `json:"role,omitempty"`
+	Selected         bool    `json:"selected"`
+	Switchable       bool    `json:"switchable"`
 }
 
 type authAPIKeySummary struct {
@@ -739,9 +742,10 @@ func buildAuthOrganizationsResponse(me authMeResponse) authOrganizationsResponse
 	switch me.PrincipalType {
 	case "api_key":
 		response.Organizations = []authOrganizationSummary{{
-			OrganizationID: me.OrganizationID,
-			Selected:       true,
-			Switchable:     false,
+			OrganizationID:   me.OrganizationID,
+			OrganizationName: me.OrganizationName,
+			Selected:         true,
+			Switchable:       false,
 		}}
 		response.APIKey = &authAPIKeySummary{
 			APIKeyID:    me.APIKeyID,
@@ -753,10 +757,11 @@ func buildAuthOrganizationsResponse(me authMeResponse) authOrganizationsResponse
 		response.Organizations = make([]authOrganizationSummary, 0, len(me.OrganizationMemberships))
 		for _, membership := range me.OrganizationMemberships {
 			response.Organizations = append(response.Organizations, authOrganizationSummary{
-				OrganizationID: membership.OrganizationID,
-				Role:           membership.Role,
-				Selected:       selectedOrg != "" && membership.OrganizationID == selectedOrg,
-				Switchable:     true,
+				OrganizationID:   membership.OrganizationID,
+				OrganizationName: membership.OrganizationName,
+				Role:             membership.Role,
+				Selected:         selectedOrg != "" && membership.OrganizationID == selectedOrg,
+				Switchable:       true,
 			})
 		}
 	}
