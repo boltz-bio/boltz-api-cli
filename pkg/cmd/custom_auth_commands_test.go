@@ -368,6 +368,41 @@ func TestAuthOrgsShowsAPIKeyScope(t *testing.T) {
 	require.Equal(t, "ws-api", apiKey["workspace_id"])
 }
 
+func TestAuthOrgsOmitsOrganizationNameWhenNullForAPIKey(t *testing.T) {
+	setAuthCommandUserDirs(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/compute/v1/auth/me", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"principal_type": "api_key",
+			"api_key_id": "key-456",
+			"key_type": "workspace",
+			"mode": "live",
+			"organization_id": "org-unnamed",
+			"organization_name": null,
+			"selected_organization_id": "org-unnamed",
+			"workspace_id": "ws-unnamed"
+		}`))
+	}))
+	defer server.Close()
+
+	output, err := runAuthCommand(t, "--format", "json", "--base-url", server.URL, "--api-key", "api-key-456", "auth", "orgs")
+	require.NoError(t, err)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal([]byte(output), &response))
+
+	organizations, ok := response["organizations"].([]any)
+	require.True(t, ok)
+	require.Len(t, organizations, 1)
+	require.Equal(t, map[string]any{
+		"organization_id": "org-unnamed",
+		"selected":        true,
+		"switchable":      false,
+	}, organizations[0])
+}
+
 func TestAuthLoginDoesNotPersistProfileOnFailure(t *testing.T) {
 	setAuthCommandUserDirs(t)
 	useFileOnlyKeyringForAuthCommandTests(t)
