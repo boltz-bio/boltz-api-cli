@@ -288,8 +288,8 @@ func TestAuthOrgsListsOAuthOrganizations(t *testing.T) {
 			"selected_organization_id": "org-second",
 			"active_organization_id": null,
 			"organization_memberships": [
-				{"organization_id": "org-first", "role": "Admin"},
-				{"organization_id": "org-second", "role": "Scientist"}
+				{"organization_id": "org-first", "organization_name": "Acme Bio", "role": "Admin"},
+				{"organization_id": "org-second", "organization_name": null, "role": "Scientist"}
 			]
 		}`))
 	}))
@@ -307,10 +307,11 @@ func TestAuthOrgsListsOAuthOrganizations(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, organizations, 2)
 	require.Equal(t, map[string]any{
-		"organization_id": "org-first",
-		"role":            "Admin",
-		"selected":        false,
-		"switchable":      true,
+		"organization_id":   "org-first",
+		"organization_name": "Acme Bio",
+		"role":              "Admin",
+		"selected":          false,
+		"switchable":        true,
 	}, organizations[0])
 	require.Equal(t, map[string]any{
 		"organization_id": "org-second",
@@ -334,6 +335,7 @@ func TestAuthOrgsShowsAPIKeyScope(t *testing.T) {
 			"key_type": "workspace",
 			"mode": "live",
 			"organization_id": "org-api",
+			"organization_name": "Acme Bio",
 			"selected_organization_id": "org-api",
 			"workspace_id": "ws-api"
 		}`))
@@ -352,9 +354,10 @@ func TestAuthOrgsShowsAPIKeyScope(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, organizations, 1)
 	require.Equal(t, map[string]any{
-		"organization_id": "org-api",
-		"selected":        true,
-		"switchable":      false,
+		"organization_id":   "org-api",
+		"organization_name": "Acme Bio",
+		"selected":          true,
+		"switchable":        false,
 	}, organizations[0])
 
 	apiKey, ok := response["api_key"].(map[string]any)
@@ -363,6 +366,41 @@ func TestAuthOrgsShowsAPIKeyScope(t *testing.T) {
 	require.Equal(t, "workspace", apiKey["key_type"])
 	require.Equal(t, "live", apiKey["mode"])
 	require.Equal(t, "ws-api", apiKey["workspace_id"])
+}
+
+func TestAuthOrgsOmitsOrganizationNameWhenNullForAPIKey(t *testing.T) {
+	setAuthCommandUserDirs(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/compute/v1/auth/me", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"principal_type": "api_key",
+			"api_key_id": "key-456",
+			"key_type": "workspace",
+			"mode": "live",
+			"organization_id": "org-unnamed",
+			"organization_name": null,
+			"selected_organization_id": "org-unnamed",
+			"workspace_id": "ws-unnamed"
+		}`))
+	}))
+	defer server.Close()
+
+	output, err := runAuthCommand(t, "--format", "json", "--base-url", server.URL, "--api-key", "api-key-456", "auth", "orgs")
+	require.NoError(t, err)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal([]byte(output), &response))
+
+	organizations, ok := response["organizations"].([]any)
+	require.True(t, ok)
+	require.Len(t, organizations, 1)
+	require.Equal(t, map[string]any{
+		"organization_id": "org-unnamed",
+		"selected":        true,
+		"switchable":      false,
+	}, organizations[0])
 }
 
 func TestAuthLoginDoesNotPersistProfileOnFailure(t *testing.T) {
