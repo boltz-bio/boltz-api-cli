@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.33.0 (2026-06-22)
+
+Full Changelog: [v0.32.0...v0.33.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.32.0...v0.33.0)
+
+### Features
+
+* **compute-api:** filter list-results by id ([42ba3d1](https://github.com/boltz-bio/boltz-api-cli/commit/42ba3d13c513aef74504aa6754a61bf49f754689))
+
 ## 0.32.0 (2026-06-22)
 
 Full Changelog: [v0.31.1...v0.32.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.31.1...v0.32.0)
