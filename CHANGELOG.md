@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.32.0 (2026-06-22)
+
+Full Changelog: [v0.31.1...v0.32.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.31.1...v0.32.0)
+
+### Features
+
+* **auth:** surface organization_name in `auth orgs` ([5bd2660](https://github.com/boltz-bio/boltz-api-cli/commit/5bd26602be5078ee6522f8dac6d26d788c973331))
+
 ## 0.31.1 (2026-06-17)
 
 Full Changelog: [v0.31.0...v0.31.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.31.0...v0.31.1)
