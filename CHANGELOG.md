@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.34.0 (2026-06-23)
+
+Full Changelog: [v0.33.0...v0.34.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.33.0...v0.34.0)
+
+### Features
+
+* **compute-api:** add share-link create and delete endpoints ([c0088da](https://github.com/boltz-bio/boltz-api-cli/commit/c0088daaf64004c468536d7180e8540649332106))
+
 ## 0.33.0 (2026-06-22)
 
 Full Changelog: [v0.32.0...v0.33.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.32.0...v0.33.0)
