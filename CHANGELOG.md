@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.35.0 (2026-06-24)
+
+Full Changelog: [v0.34.0...v0.35.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.34.0...v0.35.0)
+
+### Features
+
+* **compute-api:** add public screen resume endpoints ([cda046f](https://github.com/boltz-bio/boltz-api-cli/commit/cda046f97ada29afac8dabe8bff75f81a90586af))
+* **compute-api:** expose design resume endpoints ([d828cc1](https://github.com/boltz-bio/boltz-api-cli/commit/d828cc1ebb674be2cb8c3819f292f186a24fb8e7))
+
 ## 0.34.0 (2026-06-23)
 
 Full Changelog: [v0.33.0...v0.34.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.33.0...v0.34.0)
