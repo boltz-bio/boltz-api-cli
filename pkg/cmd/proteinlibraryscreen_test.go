@@ -158,6 +158,18 @@ func TestProteinLibraryScreenListResults(t *testing.T) {
 	})
 }
 
+func TestProteinLibraryScreenResume(t *testing.T) {
+	t.Skip("Mock server tests are disabled")
+	t.Run("regular flags", func(t *testing.T) {
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"protein:library-screen", "resume",
+			"--id", "id",
+		)
+	})
+}
+
 func TestProteinLibraryScreenStart(t *testing.T) {
 	t.Skip("Mock server tests are disabled")
 	t.Run("regular flags", func(t *testing.T) {
