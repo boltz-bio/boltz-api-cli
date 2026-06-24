@@ -163,6 +163,18 @@ func TestProteinDesignListResults(t *testing.T) {
 	})
 }
 
+func TestProteinDesignResume(t *testing.T) {
+	t.Skip("Mock server tests are disabled")
+	t.Run("regular flags", func(t *testing.T) {
+		mocktest.TestRunMockTestWithFlags(
+			t,
+			"--api-key", "string",
+			"protein:design", "resume",
+			"--id", "id",
+		)
+	})
+}
+
 func TestProteinDesignStart(t *testing.T) {
 	t.Skip("Mock server tests are disabled")
 	t.Run("regular flags", func(t *testing.T) {
