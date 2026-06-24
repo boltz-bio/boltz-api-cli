@@ -167,6 +167,21 @@ var proteinDesignListResults = cli.Command{
 	HideHelpCommand: true,
 }
 
+var proteinDesignResume = cli.Command{
+	Name:    "resume",
+	Usage:   "Resume a stopped protein design run from its last checkpoint",
+	Suggest: true,
+	Flags: []cli.Flag{
+		&requestflag.Flag[string]{
+			Name:      "id",
+			Required:  true,
+			PathParam: "id",
+		},
+	},
+	Action:          handleProteinDesignResume,
+	HideHelpCommand: true,
+}
+
 var proteinDesignStart = cli.Command{
 	Name:    "start",
 	Usage:   "Create a new design run that generates novel protein binder candidates",
@@ -473,6 +488,48 @@ func handleProteinDesignListResults(ctx context.Context, cmd *cli.Command) error
 			Transform:      transform,
 		})
 	}
+}
+
+func handleProteinDesignResume(ctx context.Context, cmd *cli.Command) error {
+	client := boltzapi.NewClient(getDefaultRequestOptions(cmd)...)
+	unusedArgs := cmd.Args().Slice()
+	if !cmd.IsSet("id") && len(unusedArgs) > 0 {
+		cmd.Set("id", unusedArgs[0])
+		unusedArgs = unusedArgs[1:]
+	}
+	if len(unusedArgs) > 0 {
+		return fmt.Errorf("Unexpected extra arguments: %v", unusedArgs)
+	}
+
+	options, err := flagOptions(
+		cmd,
+		apiquery.NestedQueryFormatBrackets,
+		apiquery.ArrayQueryFormatRepeat,
+		EmptyBody,
+		false,
+	)
+	if err != nil {
+		return err
+	}
+
+	var res []byte
+	options = append(options, option.WithResponseBodyInto(&res))
+	_, err = client.Protein.Design.Resume(ctx, cmd.Value("id").(string), options...)
+	if err != nil {
+		return err
+	}
+
+	obj := gjson.ParseBytes(res)
+	format := cmd.Root().String("format")
+	explicitFormat := cmd.Root().IsSet("format")
+	transform := cmd.Root().String("transform")
+	return ShowJSON(obj, ShowJSONOpts{
+		ExplicitFormat: explicitFormat,
+		Format:         format,
+		RawOutput:      cmd.Root().Bool("raw-output"),
+		Title:          "protein:design resume",
+		Transform:      transform,
+	})
 }
 
 func handleProteinDesignStart(ctx context.Context, cmd *cli.Command) error {
