@@ -5,8 +5,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/url"
-
 	"github.com/boltz-bio/boltz-api-go"
 
 	"github.com/boltz-bio/boltz-api-cli/internal/apiquery"
@@ -628,8 +626,7 @@ func handleSmallMoleculeLibraryScreenResume(ctx context.Context, cmd *cli.Comman
 
 	var res []byte
 	options = append(options, option.WithResponseBodyInto(&res))
-	path := fmt.Sprintf("compute/v1/small-molecule/library-screen/%s/resume", url.PathEscape(cmd.Value("id").(string)))
-	err = client.Post(ctx, path, nil, nil, options...)
+	_, err = client.SmallMolecule.LibraryScreen.Resume(ctx, cmd.Value("id").(string), options...)
 	if err != nil {
 		return err
 	}
