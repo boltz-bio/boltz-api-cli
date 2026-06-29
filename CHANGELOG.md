@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.36.0 (2026-06-29)
+
+Full Changelog: [v0.35.0...v0.36.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.35.0...v0.36.0)
+
+### Features
+
+* **share-links:** map share_links resource for SDK + CLI generation ([54fee51](https://github.com/boltz-bio/boltz-api-cli/commit/54fee5182642e643a3bd520353aeb2030a563d7c))
+
+
+### Bug Fixes
+
+* bump Go SDK for share-links ([b588b54](https://github.com/boltz-bio/boltz-api-cli/commit/b588b54af95b8daf7017033fe5da6dbcb58649d1))
+
 ## 0.35.0 (2026-06-24)
 
 Full Changelog: [v0.34.0...v0.35.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.34.0...v0.35.0)
