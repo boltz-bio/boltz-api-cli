@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.37.0 (2026-07-01)
+
+Full Changelog: [v0.36.0...v0.37.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.36.0...v0.37.0)
+
+### Features
+
+* **compute:** gate share links by org feature ([845125c](https://github.com/boltz-bio/boltz-api-cli/commit/845125c5606c840633371388995fb70abb5d090e))
+
 ## 0.36.0 (2026-06-29)
 
 Full Changelog: [v0.35.0...v0.36.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.35.0...v0.36.0)
