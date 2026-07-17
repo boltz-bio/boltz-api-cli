@@ -42,21 +42,29 @@ jobs:
     if: github.repository == 'boltz-bio/boltz-api-cli-staging'
     env:
       PRODUCTION_REPO: boltz-bio/boltz-api-cli
-      PRODUCTION_REPO_TOKEN: ${{ secrets.PRODUCTION_REPO_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Mint production read token
+        id: production-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PROMOTE_APP_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: boltz-bio
+          repositories: |
+            boltz-api-cli
+          permission-contents: read
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Evaluate sync state and post status to open main PRs
+        env:
+          PRODUCTION_TOKEN: ${{ steps.production-token.outputs.token }}
         run: |
           set -euo pipefail
-          if [ -n "${PRODUCTION_REPO_TOKEN:-}" ]; then
-            git remote add production "https://x-access-token:${PRODUCTION_REPO_TOKEN}@github.com/${PRODUCTION_REPO}.git"
-          else
-            git remote add production "https://github.com/${PRODUCTION_REPO}.git"
-          fi
+          git remote add production "https://x-access-token:${PRODUCTION_TOKEN}@github.com/${PRODUCTION_REPO}.git"
           git fetch --no-tags production main
           if git merge-base --is-ancestor production/main HEAD; then
             state=success; desc="staging main is in sync with production"
