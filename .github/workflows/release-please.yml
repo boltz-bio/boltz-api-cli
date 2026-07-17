@@ -14,7 +14,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Mint release token
+        id: release-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PROMOTE_APP_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: boltz-bio
+          repositories: |
+            boltz-api-cli
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         id: release
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.release-token.outputs.token }}

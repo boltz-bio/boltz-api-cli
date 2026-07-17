@@ -17,13 +17,24 @@ jobs:
     env:
       STAGING_REPO: boltz-bio/boltz-api-cli-staging
     steps:
+      - name: Mint staging dispatch token
+        id: staging-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PROMOTE_APP_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: boltz-bio
+          repositories: |
+            boltz-api-cli-staging
+          permission-contents: write
+
       - name: Dispatch back-sync to staging
         env:
-          DISPATCH_TOKEN: ${{ secrets.STAGING_DISPATCH_TOKEN }}
+          DISPATCH_TOKEN: ${{ steps.staging-token.outputs.token }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "STAGING_DISPATCH_TOKEN not set" >&2; exit 1; }
+          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "promote-bot staging token was not minted" >&2; exit 1; }
           payload=$(jq -n --arg ref "$REF_NAME" '{event_type:"prod-released",client_payload:{ref:$ref}}')
           code=$(curl -sS -o /tmp/dispatch.txt -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" \

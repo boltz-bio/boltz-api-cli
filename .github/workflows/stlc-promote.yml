@@ -27,8 +27,18 @@ jobs:
     environment: production
     env:
       PRODUCTION_REPO: boltz-bio/boltz-api-cli
-      GH_TOKEN: ${{ secrets.PRODUCTION_REPO_TOKEN }}
     steps:
+      - name: Mint production write token
+        id: production-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PROMOTE_APP_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: boltz-bio
+          repositories: |
+            boltz-api-cli
+          permission-contents: write
+
       - name: Check out staging
         uses: actions/checkout@v6
         with:
@@ -36,6 +46,8 @@ jobs:
           persist-credentials: false
 
       - name: Fetch production main
+        env:
+          GH_TOKEN: ${{ steps.production-token.outputs.token }}
         run: |
           git remote add production \
             "https://x-access-token:${GH_TOKEN}@github.com/${PRODUCTION_REPO}.git"

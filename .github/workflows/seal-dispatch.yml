@@ -14,8 +14,8 @@ name: Seal custom code (dispatch)
 # across regenerations. If you would rather keep things simple, drop this file
 # and rely on the config repo's scheduled `stlc-sync-tracking.yml` poll alone.
 #
-# Lives in the STAGING repo. Requires CONFIG_DISPATCH_TOKEN — a token that can
-# send a repository_dispatch to the config repo.
+# Lives in the STAGING repo. It mints a short-lived token from the scoped
+# boltz-promote-bot installation to send a repository_dispatch to the config repo.
 on:
   push:
     # main only. stlc preview/integrated/codegen branches never push to main.
@@ -35,9 +35,20 @@ jobs:
     env:
       CONFIG_REPO: boltz-bio/boltz-platform
     steps:
+      - name: Mint config dispatch token
+        id: config-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PROMOTE_APP_ID }}
+          private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
+          owner: boltz-bio
+          repositories: |
+            boltz-platform
+          permission-contents: write
+
       - name: Loop-guard and send reseal dispatch
         env:
-          DISPATCH_TOKEN: ${{ secrets.CONFIG_DISPATCH_TOKEN }}
+          DISPATCH_TOKEN: ${{ steps.config-token.outputs.token }}
           HEAD_MSG: ${{ github.event.head_commit.message }}
           HEAD_AUTHOR_NAME: ${{ github.event.head_commit.author.name }}
           SHA: ${{ github.sha }}
@@ -58,7 +69,7 @@ jobs:
             exit 0
           fi
 
-          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "CONFIG_DISPATCH_TOKEN not set" >&2; exit 1; }
+          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "promote-bot config token was not minted" >&2; exit 1; }
           payload=$(jq -n --arg sha "$SHA" --arg repo "$REPO" \
             '{event_type:"seal-custom-code",client_payload:{target:"all",sha:$sha,repo:$repo}}')
           code=$(curl -sS -o /tmp/dispatch.txt -w '%{http_code}' -X POST \
