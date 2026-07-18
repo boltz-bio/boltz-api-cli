@@ -154,6 +154,21 @@ func init() {
 				},
 			},
 			{
+				Name:     "protein:sequence-redesign",
+				Category: "API RESOURCE",
+				Suggest:  true,
+				Commands: []*cli.Command{
+					&proteinSequenceRedesignRetrieve,
+					&proteinSequenceRedesignList,
+					&proteinSequenceRedesignDeleteData,
+					&proteinSequenceRedesignEstimateCost,
+					&proteinSequenceRedesignListResults,
+					&proteinSequenceRedesignResume,
+					&proteinSequenceRedesignStart,
+					&proteinSequenceRedesignStop,
+				},
+			},
+			{
 				Name:     "protein:library-screen",
 				Category: "API RESOURCE",
 				Suggest:  true,
