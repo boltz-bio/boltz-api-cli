@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.38.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.37.1...v0.38.0) (2026-07-19)
+
+
+### Features
+
+* **sdk:** regenerate from reviewed API contract ([f4acb89](https://github.com/boltz-bio/boltz-api-cli/commit/f4acb89234d87f5e037048d689195121db443315))
+* **sdk:** regenerate from reviewed API contract ([7a4dffe](https://github.com/boltz-bio/boltz-api-cli/commit/7a4dffe33f6e3eb164e778b088bfed1fec8f089d))
+
+
+### Bug Fixes
+
+* **ci:** isolate public release credentials ([daa122b](https://github.com/boltz-bio/boltz-api-cli/commit/daa122b4da60bd00140c5ec639b299e664859cab))
+* **ci:** isolate public release credentials ([3e84ba1](https://github.com/boltz-bio/boltz-api-cli/commit/3e84ba1e15def206d0c21f1c8422619f6fcff968))
+* **ci:** mint scoped SDK automation tokens ([ee10706](https://github.com/boltz-bio/boltz-api-cli/commit/ee1070679d98b6ddb55663fb91c22b0f8334a268))
+* **ci:** mint scoped SDK automation tokens ([e6162e2](https://github.com/boltz-bio/boltz-api-cli/commit/e6162e2c7290b1e446efd89031e8ed429c001e38))
+* **stlc:** promote through merge-commit PRs ([9482dfa](https://github.com/boltz-bio/boltz-api-cli/commit/9482dfa3c88263fd2862aca64bdc9758dbe9e305))
+
+
+### Chores
+
+* bootstrap STLC release automation ([425c207](https://github.com/boltz-bio/boltz-api-cli/commit/425c2070b5242ecfc9e7931e37e882b3eb928680))
+* migrate SDK automation to STLC ([37885f2](https://github.com/boltz-bio/boltz-api-cli/commit/37885f296072b102dc18f688199a935634a58c26))
+* migrate SDK automation to STLC ([b91fab8](https://github.com/boltz-bio/boltz-api-cli/commit/b91fab827b8be1495ca7f2d12e4894fd0aa9ff5f))
+* migrate SDK automation to STLC ([c7d5860](https://github.com/boltz-bio/boltz-api-cli/commit/c7d586015e1a09f5d84fde1c95e53cd46084717e))
+* migrate SDK automation to STLC ([8a3d4e4](https://github.com/boltz-bio/boltz-api-cli/commit/8a3d4e4463ca55796d18996625b4fab9aa630463))
+* **sdk:** promote generated SDK ([aace6e9](https://github.com/boltz-bio/boltz-api-cli/commit/aace6e93710d74fae9901f10c16598129b11417d))
+* **stlc:** merge production trunk ([0fe655b](https://github.com/boltz-bio/boltz-api-cli/commit/0fe655b176d68c61aba1ed55ba5972f817e8dfaa))
+* **stlc:** reconcile bootstrap lineage ([ec907b2](https://github.com/boltz-bio/boltz-api-cli/commit/ec907b2cee7efdc8a020220453d005e75be7dd04))
+* **stlc:** reconcile bootstrap lineage ([fc81866](https://github.com/boltz-bio/boltz-api-cli/commit/fc818663a2a1ecdfd237a6238a80076c869fd9a4))
+
 ## 0.37.1 (2026-07-08)
 
 Full Changelog: [v0.37.0...v0.37.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.37.0...v0.37.1)
