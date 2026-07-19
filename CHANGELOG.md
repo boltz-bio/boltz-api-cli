@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.38.0 (2026-07-19)
+
+Full Changelog: [v0.37.1...v0.38.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.37.1...v0.38.0)
+
+### Features
+
+* **stlc:** configurable CI runner and private-production-repo support in workflow templates ([cc7a00e](https://github.com/boltz-bio/boltz-api-cli/commit/cc7a00edefe3d9ee66a08388fa33454f3adf609a))
+
 ## 0.37.1 (2026-07-08)
 
 Full Changelog: [v0.37.0...v0.37.1](https://github.com/boltz-bio/boltz-api-cli/compare/v0.37.0...v0.37.1)
