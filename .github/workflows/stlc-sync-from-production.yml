@@ -4,16 +4,13 @@ name: Sync from production
 # This keeps staging and production identical and linear so the next `stlc build`
 # reseals against the released state.
 #
-# Triggered by the production-side release dispatch and by a periodic poll.
+# Polled from private staging so production never needs credentials for private repos.
 on:
   schedule:
-    # Polls for non-release production changes. If you take frequent
-    # community PRs, tighten this or add an eager `on: push: [main]`
-    # dispatch on production alongside the release one.
-    - cron: "17 */6 * * *"
+    # GitHub schedules are best-effort. Manual dispatch remains available for
+    # an immediate post-release back-sync.
+    - cron: "8,18,28,38,48,58 * * * *"
   workflow_dispatch: {}
-  repository_dispatch:
-    types: [prod-released]
 
 permissions:
   contents: write
@@ -31,7 +28,7 @@ jobs:
     steps:
       - name: Mint sync token
         id: sync-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.PROMOTE_APP_ID }}
           private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
