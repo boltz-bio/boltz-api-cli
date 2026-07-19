@@ -1,17 +1,12 @@
 name: Promote SDKs
 
-# Promote staging to production by fast-forwarding production `main` up to the
-# staging trunk, preserving commit SHAs. Because the SHAs are preserved,
-# production `main` and staging `main` stay identical and linear, the sealed
-# custom-code commit stays an ancestor of both, and there is no divergence to
-# heal on the next `stlc build`.
-#
-# Manual dispatch (workflow_dispatch): spec/codegen changes accumulate on
-# staging `main`, and a maintainer promotes the batch in one fast-forward when
-# ready to cut a release. Optionally gate each run behind a required-reviewer
-# approval — see the `environment` note on the job below. release-please then
-# opens its version/changelog PR on production on top.
+# Open a merge-commit promotion PR whenever staging main advances. The PR is
+# the production security and CI boundary; release-please remains the separate
+# package-publication gate. Never squash or rebase this PR: a merge commit keeps
+# every staging commit reachable so back-sync can preserve STLC lineage.
 on:
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -21,16 +16,15 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     if: github.repository == 'boltz-bio/boltz-api-cli-staging'
-    # Optional: add required reviewers on each promote run before the fast-forward push.
-    # With no reviewers it only scopes secrets/variables and adds no gate, so the manual dispatch
-    # above is the only checkpoint. Remove this line if you don't use it.
-    environment: production
+    concurrency:
+      group: stlc-promote
+      cancel-in-progress: true
     env:
       PRODUCTION_REPO: boltz-bio/boltz-api-cli
     steps:
       - name: Mint production write token
         id: production-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ secrets.PROMOTE_APP_ID }}
           private-key: ${{ secrets.PROMOTE_APP_PRIVATE_KEY }}
@@ -38,6 +32,7 @@ jobs:
           repositories: |
             boltz-api-cli
           permission-contents: write
+          permission-pull-requests: write
 
       - name: Check out staging
         uses: actions/checkout@v6
@@ -68,15 +63,39 @@ jobs:
             echo "synced=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Promote staging to production (fast-forward)
+      - name: Push staging main to the production release branch
         if: steps.diff.outputs.synced == 'false'
         run: |
-          # Refuse unless production/main is an ancestor of staging/main. If it
-          # isn't, the trunks have forked (someone advanced production out of
-          # band without back-syncing first) and a fast-forward is unsafe.
-          if ! git merge-base --is-ancestor production/main origin/main; then
-            echo "::error title=Promote blocked::production/main is not an ancestor of staging main. Back-sync production into staging first."
-            exit 1
+          # This force-push is confined to the bot-owned PR carrier branch.
+          git push production origin/main:refs/heads/stainless/release --force
+
+      - name: Open or update the production promotion PR
+        if: steps.diff.outputs.synced == 'false'
+        env:
+          GH_TOKEN: ${{ steps.production-token.outputs.token }}
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --repo "${PRODUCTION_REPO}" \
+            --head stainless/release \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -z "${PR_NUMBER}" ]; then
+            PR_URL=$(gh pr create \
+              --repo "${PRODUCTION_REPO}" \
+              --base main \
+              --head stainless/release \
+              --title "chore(sdk): promote generated SDK" \
+              --body "Automated STLC promotion from the private staging trunk. Merge with a merge commit; never squash or rebase.")
+            PR_NUMBER=${PR_URL##*/}
           fi
-          git push production origin/main:refs/heads/main
-          echo "Fast-forwarded production/main to staging/main."
+
+          # Auto-merge waits for production's branch rules, reviews, and checks.
+          # Failing here is intentional: a promotion must not silently become a
+          # manual queue because repository policy drifted.
+          gh pr merge "${PR_NUMBER}" \
+            --repo "${PRODUCTION_REPO}" \
+            --auto \
+            --merge
