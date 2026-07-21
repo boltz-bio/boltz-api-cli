@@ -104,6 +104,12 @@ boltz-api predictions:structure-and-binding start --help
 | Environment variable | Required | Default value |
 | -------------------- | -------- | ------------- |
 | `BOLTZ_API_KEY`      | no       | `null`        |
+| `BOLTZ_API_NO_UPDATE_CHECK` | no | `0` |
+
+When run interactively, the CLI checks once per day whether a newer release is
+available and prints an upgrade suggestion to stderr. The check is advisory and
+does not run in CI, when output is redirected, or when a custom API base URL is
+configured. Set `BOLTZ_API_NO_UPDATE_CHECK=1` to disable it explicitly.
 
 Set `BOLTZ_API_KEY` for API-key authentication. OAuth authentication can also be
 configured with:
