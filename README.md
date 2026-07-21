@@ -30,6 +30,18 @@ existing binary is found, it installs to `$HOME/.local/bin` on macOS/Linux and
 `%LOCALAPPDATA%\Programs\Boltz\bin` on Windows. Set `BOLTZ_API_INSTALL_DIR` to
 choose a different install directory.
 
+After installation, update an installer-managed binary directly from the CLI:
+
+```sh
+boltz-api update
+boltz-api update --check
+```
+
+The update command downloads the platform archive from the install CDN,
+verifies its published SHA-256 checksum, and replaces the current executable
+atomically. If the binary is managed by another package manager, use that
+package manager's update command instead.
+
 The installer uses `https://install.boltz.bio/boltz-api` for release metadata
 and binary downloads. Set `BOLTZ_API_INSTALL_BASE_URL` to use a mirror. Set
 `BOLTZ_API_RELEASE_RETRIES` or `BOLTZ_API_RELEASE_RETRY_DELAY` to override the

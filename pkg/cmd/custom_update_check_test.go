@@ -73,6 +73,7 @@ func TestRunUpdateCheckCachesSuccessfulCheck(t *testing.T) {
 
 	require.NoError(t, runUpdateCheck(context.Background()))
 	require.Contains(t, output.String(), "A newer boltz-api CLI is available.")
+	require.Contains(t, output.String(), "Run `boltz-api update` to update")
 	require.Contains(t, output.String(), "Update with: install command")
 	require.Equal(t, 1, fetchCalls)
 

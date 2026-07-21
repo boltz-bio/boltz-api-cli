@@ -40,6 +40,7 @@ var (
 func init() {
 	// Keep the update check outside generated files so it survives SDK regeneration.
 	Command.Before = updateCheckBefore
+	Command.Commands = append(Command.Commands, &updateCommand)
 }
 
 func updateCheckBefore(ctx context.Context, cmd *cli.Command) (context.Context, error) {
@@ -69,7 +70,7 @@ func shouldRunUpdateCheckWith(args []string, interactive bool, ci, optOut string
 
 	for _, arg := range args {
 		switch arg {
-		case "--help", "-h", "--version", "-v", "-V", "__complete", "cli":
+		case "--help", "-h", "--version", "-v", "-V", "__complete", "cli", "update":
 			return false
 		}
 	}
@@ -199,6 +200,7 @@ func writeUpdateNotice(w io.Writer, status *boltzapi.CliVersionResponse) {
 	}
 
 	_, _ = fmt.Fprintf(w, "\n%s (current %s, latest %s)\n", message, Version, status.Latest)
+	_, _ = fmt.Fprintln(w, "Run `boltz-api update` to update, or rerun the installer:")
 	if runtime.GOOS == "windows" {
 		if command := strings.TrimSpace(status.Install.Windows); command != "" {
 			_, _ = fmt.Fprintf(w, "Update with: %s\n", command)
