@@ -52,16 +52,14 @@ jobs:
           git remote add production "https://x-access-token:${SYNC_TOKEN}@github.com/${PRODUCTION_REPO}.git"
           git fetch production main
 
-      - name: Check whether production has content staging lacks
+      - name: Check whether production has commits staging lacks
         id: diff
         run: |
-          # Inverse of the promote guard: would merging production into
-          # staging change staging's tree? If not, staging already has
-          # production's content.
-          MERGED=$(git merge-tree --write-tree origin/main production/main) || MERGED=conflict
-          STAGING_TREE=$(git rev-parse 'origin/main^{tree}')
-          if [ "$MERGED" = "$STAGING_TREE" ]; then
-            echo "Staging already has production's content. Nothing to pull back."
+          # A promotion merge can leave production with the same tree as
+          # staging but a newer commit. Preserve that lineage by syncing until
+          # production/main is an ancestor of staging/main.
+          if git merge-base --is-ancestor production/main origin/main; then
+            echo "Staging already contains production's commit. Nothing to pull back."
             echo "behind=false" >> "$GITHUB_OUTPUT"
           else
             echo "behind=true" >> "$GITHUB_OUTPUT"
