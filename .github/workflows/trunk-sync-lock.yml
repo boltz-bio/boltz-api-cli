@@ -36,7 +36,7 @@ permissions:
 
 jobs:
   lock:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ci-1x2
     if: github.repository == 'boltz-bio/boltz-api-cli-staging'
     env:
       PRODUCTION_REPO: boltz-bio/boltz-api-cli
