@@ -127,12 +127,12 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.bonds",
-			Usage:      "Bond constraints between atoms. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Bond constraints between atoms. Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{
@@ -195,12 +195,12 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.bonds",
-			Usage:      "Bond constraints between atoms. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Bond constraints between atoms. Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{
