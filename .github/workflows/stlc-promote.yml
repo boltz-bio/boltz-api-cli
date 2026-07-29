@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   promote:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ci-1x2
     if: github.repository == 'boltz-bio/boltz-api-cli-staging'
     concurrency:
       group: stlc-promote

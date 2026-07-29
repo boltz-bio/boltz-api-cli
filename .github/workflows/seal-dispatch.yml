@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   dispatch:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ci-1x2
     if: github.repository == 'boltz-bio/boltz-api-cli-staging'
     env:
       CONFIG_REPO: boltz-bio/boltz-platform

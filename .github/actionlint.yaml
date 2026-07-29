@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - namespace-profile-ci-1x2
+    - namespace-profile-ci-2x4
