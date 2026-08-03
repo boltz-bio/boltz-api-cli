@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.39.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.38.0...v0.39.0) (2026-08-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** regenerate from reviewed API contract
+
+### Features
+
+* **cli:** add verified self-update command ([786aa54](https://github.com/boltz-bio/boltz-api-cli/commit/786aa5488312b5734b2c5c0701f96617eed2ff11))
+* **cli:** nudge interactive users to update ([d4a37b2](https://github.com/boltz-bio/boltz-api-cli/commit/d4a37b2ab49dc278e7f3bcae74100b43aeb723cf))
+* **cli:** nudge interactive users to update ([c0b70d2](https://github.com/boltz-bio/boltz-api-cli/commit/c0b70d22deff9756fcba730e73b291deeba1b6fc))
+* **sdk:** regenerate from reviewed API contract ([10884fb](https://github.com/boltz-bio/boltz-api-cli/commit/10884fbb3675b37c9ea26b9c502d92c80dc8bed3))
+
+
+### Bug Fixes
+
+* **cli:** replace binaries safely on Windows ([4f5a1a0](https://github.com/boltz-bio/boltz-api-cli/commit/4f5a1a0e328ea948b1eb87b066a9ff987578a63b))
+* **experiments:** rename prediction structure files ([8baef3b](https://github.com/boltz-bio/boltz-api-cli/commit/8baef3b8f0575ca3c3a95c10382d80d680e72e94))
+* **experiments:** rename standalone prediction structures ([cdd2a70](https://github.com/boltz-bio/boltz-api-cli/commit/cdd2a7080532d16aeb5434e3321c02979d1430e9))
+
+
+### Chores
+
+* **sdk:** promote generated SDK ([b8e22fe](https://github.com/boltz-bio/boltz-api-cli/commit/b8e22fec2c1c7a0ea088ef2cb5100a63e5dad140))
+* **sdk:** promote generated SDK ([9365e79](https://github.com/boltz-bio/boltz-api-cli/commit/9365e79978f2b3e8a8297a50320932db5ca4da26))
+
 ## [0.38.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.37.1...v0.38.0) (2026-07-19)
 
 
