@@ -214,7 +214,10 @@ func TestPredictionDownloadResultsDefaultProgressJSONL(t *testing.T) {
 	cwd := t.TempDir()
 	t.Chdir(cwd)
 
-	archiveBytes := makeTarGzArchive(t, map[string]string{"nested/output.txt": "done"})
+	archiveBytes := makeTarGzArchive(t, map[string]string{
+		"nested/output.txt":              "done",
+		"result/predicted_structure.cif": "data_prediction\n",
+	})
 	var archiveRequests atomic.Int32
 
 	var server *httptest.Server
@@ -249,6 +252,8 @@ func TestPredictionDownloadResultsDefaultProgressJSONL(t *testing.T) {
 	assert.EqualValues(t, 1, archiveRequests.Load())
 	assert.FileExists(t, filepath.Join(runDir, "outputs", "archive.tar.gz"))
 	assert.FileExists(t, filepath.Join(runDir, "outputs", "files", "nested", "output.txt"))
+	assert.FileExists(t, filepath.Join(runDir, "outputs", "files", "result", "pred_123_predicted.cif"))
+	assert.NoFileExists(t, filepath.Join(runDir, "outputs", "files", "result", "predicted_structure.cif"))
 
 	run := readDownloadResultsTestJSON(t, filepath.Join(runDir, "run.json"))
 	assert.Equal(t, "pred_123", run["id"])

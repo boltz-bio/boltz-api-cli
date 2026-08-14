@@ -52,6 +52,7 @@ func ApplyCustomizations(app *cli.Command) {
 
 	addMergedInputFlags(app)
 	addRunCommands(app)
+	addProteinDesignCuratedSpecificationsCommand(app)
 	if !hasCommand(app.Commands, downloadStatusCommand.Name) {
 		app.Commands = append(app.Commands, downloadStatusCommand)
 	}

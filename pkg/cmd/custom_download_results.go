@@ -1033,6 +1033,9 @@ func (e *downloadResultsEngine) waitForPrediction(ctx context.Context, runDir st
 					return err
 				}
 			}
+			if err := prefixPredictionStructureFile(runDir, runID); err != nil {
+				return err
+			}
 			e.sink.info("ready", fmt.Sprintf("Prediction ready in %s", runDir), runDir, metadata, nil)
 			return nil
 		default:
@@ -1928,17 +1931,24 @@ func pipelineResultLocalPaths(runDir string, resultDir string) map[string]string
 }
 
 func prefixPipelineResultStructureFile(resultDir string, resultID string) error {
-	extractedDir := filepath.Join(resultDir, "files")
+	return prefixStructureArtifactFile(filepath.Join(resultDir, "files"), resultID)
+}
+
+func prefixPredictionStructureFile(runDir string, predictionID string) error {
+	return prefixStructureArtifactFile(filepath.Join(runDir, "outputs", "files"), predictionID)
+}
+
+func prefixStructureArtifactFile(extractedDir string, artifactID string) error {
 	if info, err := os.Stat(extractedDir); err != nil || !info.IsDir() {
 		return err
 	}
 
-	structurePath := findExtractedResultFile(extractedDir, preferredStructureArtifactNames(resultID), isStructureArtifactPath)
+	structurePath := findExtractedResultFile(extractedDir, preferredStructureArtifactNames(artifactID), isStructureArtifactPath)
 	if structurePath == "" {
 		return nil
 	}
 
-	prefixedName := prefixedStructureArtifactName(resultID, structurePath)
+	prefixedName := prefixedStructureArtifactName(artifactID, structurePath)
 	if filepath.Base(structurePath) == prefixedName {
 		return nil
 	}
