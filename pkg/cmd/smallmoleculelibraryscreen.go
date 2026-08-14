@@ -135,7 +135,7 @@ var smallMoleculeLibraryScreenEstimateCost = requestflag.WithInnerFlags(cli.Comm
 	"target": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.entities",
-			Usage:      "Protein entities defining the target structure. Each entity represents a protein chain.",
+			Usage:      "Protein and glycan entities defining the target structure. At least one protein entity is required.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
@@ -289,7 +289,7 @@ var smallMoleculeLibraryScreenStart = requestflag.WithInnerFlags(cli.Command{
 	"target": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.entities",
-			Usage:      "Protein entities defining the target structure. Each entity represents a protein chain.",
+			Usage:      "Protein and glycan entities defining the target structure. At least one protein entity is required.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{

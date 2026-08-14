@@ -184,6 +184,18 @@ func init() {
 				},
 			},
 			{
+				Name:     "share-links",
+				Category: "API RESOURCE",
+				Suggest:  true,
+				Commands: []*cli.Command{
+					&shareLinksCreate,
+					&shareLinksRetrieve,
+					&shareLinksArchive,
+					&shareLinksListPipelineResults,
+					&shareLinksRead,
+				},
+			},
+			{
 				Name:     "admin:workspaces",
 				Category: "API RESOURCE",
 				Suggest:  true,
