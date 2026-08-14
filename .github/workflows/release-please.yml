@@ -11,7 +11,7 @@ permissions:
 jobs:
   release-please:
     if: github.repository == 'boltz-bio/boltz-api-cli'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ci-1x2
 
     steps:
       - name: Mint release token
