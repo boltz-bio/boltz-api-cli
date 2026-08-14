@@ -65,7 +65,8 @@ jobs:
           git remote add production "https://x-access-token:${PRODUCTION_TOKEN}@github.com/${PRODUCTION_REPO}.git"
           git fetch --no-tags production main
           while IFS=$'\t' read -r number sha; do
-            git fetch --no-tags origin "refs/pull/${number}/head"
+            git fetch --no-tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "refs/pull/${number}/head"
             if git merge-base --is-ancestor production/main FETCH_HEAD; then
               state=success; desc="PR contains current production main"
             else
