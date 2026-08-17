@@ -48,6 +48,62 @@ func TestRequestOptionsKeepAPIKeyMode(t *testing.T) {
 	require.Empty(t, gotOrganization)
 }
 
+func TestRequestOptionsUseStoredBaseURL(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	t.Setenv(authconfig.EnvBaseURL, "")
+
+	var requested bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	require.NoError(t, authconfig.SaveBaseURL(server.URL))
+
+	cmd := parsedTestCommand(t, "--api-key", "api-key-123", "call")
+	client := githubcomboltzbioboltzcomputeapigo.NewClient(getDefaultRequestOptions(cmd)...)
+	var result map[string]any
+	require.NoError(t, client.Get(context.Background(), "/check", nil, &result))
+	require.True(t, requested)
+}
+
+func TestRequestOptionsBaseURLPrecedence(t *testing.T) {
+	setAuthCommandUserDirs(t)
+
+	stored := httptest.NewServer(http.NotFoundHandler())
+	defer stored.Close()
+	require.NoError(t, authconfig.SaveBaseURL(stored.URL))
+
+	var envRequested bool
+	envServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		envRequested = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer envServer.Close()
+	t.Setenv(authconfig.EnvBaseURL, envServer.URL)
+
+	cmd := parsedTestCommand(t, "--api-key", "api-key-123", "call")
+	client := githubcomboltzbioboltzcomputeapigo.NewClient(getDefaultRequestOptions(cmd)...)
+	var result map[string]any
+	require.NoError(t, client.Get(context.Background(), "/check", nil, &result))
+	require.True(t, envRequested)
+
+	var flagRequested bool
+	flagServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flagRequested = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer flagServer.Close()
+
+	cmd = parsedTestCommand(t, "--base-url", flagServer.URL, "--api-key", "api-key-123", "call")
+	client = githubcomboltzbioboltzcomputeapigo.NewClient(getDefaultRequestOptions(cmd)...)
+	require.NoError(t, client.Get(context.Background(), "/check", nil, &result))
+	require.True(t, flagRequested)
+}
+
 func TestRequestOptionsInjectBearerTokenAndRemoveInheritedAPIKey(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

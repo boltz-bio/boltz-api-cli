@@ -11,6 +11,7 @@ import (
 
 func TestResolvePrecedenceAndScopeReplacement(t *testing.T) {
 	setUserDirs(t)
+	require.NoError(t, SaveBaseURL("https://config-api.example.com"))
 
 	require.NoError(t, SaveProfile(Resolved{
 		IssuerURL:   "https://config.example.com",
@@ -25,6 +26,7 @@ func TestResolvePrecedenceAndScopeReplacement(t *testing.T) {
 	t.Setenv(EnvAuthScope, "env.read,env.write")
 	t.Setenv(EnvAuthAudience, "env-audience")
 	t.Setenv(EnvOrg, "env-org")
+	t.Setenv(EnvBaseURL, "https://env-api.example.com")
 
 	resolved := resolveForArgs(t,
 		"--auth-client-id", "flag-client",
@@ -33,15 +35,35 @@ func TestResolvePrecedenceAndScopeReplacement(t *testing.T) {
 	)
 
 	require.Equal(t, "https://env.example.com", resolved.IssuerURL)
+	require.Equal(t, "https://env-api.example.com", resolved.BaseURL)
 	require.Equal(t, "flag-client", resolved.ClientID)
 	require.Equal(t, []string{"flag.read"}, resolved.Scopes)
 	require.Equal(t, "env-audience", resolved.Audience)
 	require.Equal(t, "flag-org", resolved.SelectedOrg)
 	require.Equal(t, SourceRuntime, resolved.Sources.IssuerURL)
+	require.Equal(t, SourceRuntime, resolved.Sources.BaseURL)
 	require.Equal(t, SourceRuntime, resolved.Sources.ClientID)
 	require.Equal(t, SourceRuntime, resolved.Sources.Scopes)
 	require.Equal(t, SourceRuntime, resolved.Sources.Audience)
 	require.Equal(t, SourceRuntime, resolved.Sources.SelectedOrg)
+}
+
+func TestResolveBaseURLPrecedence(t *testing.T) {
+	setUserDirs(t)
+	require.NoError(t, SaveBaseURL("https://config-api.example.com"))
+
+	resolved := resolveForArgs(t)
+	require.Equal(t, "https://config-api.example.com", resolved.BaseURL)
+	require.Equal(t, SourceConfig, resolved.Sources.BaseURL)
+
+	t.Setenv(EnvBaseURL, "https://env-api.example.com")
+	resolved = resolveForArgs(t)
+	require.Equal(t, "https://env-api.example.com", resolved.BaseURL)
+	require.Equal(t, SourceRuntime, resolved.Sources.BaseURL)
+
+	resolved = resolveForArgs(t, "--base-url", "https://flag-api.example.com")
+	require.Equal(t, "https://flag-api.example.com", resolved.BaseURL)
+	require.Equal(t, SourceRuntime, resolved.Sources.BaseURL)
 }
 
 func TestResolveFallsBackToBoltzOAuthDefaults(t *testing.T) {
@@ -53,11 +75,37 @@ func TestResolveFallsBackToBoltzOAuthDefaults(t *testing.T) {
 	require.Equal(t, []string{"openid", "offline_access", "profile", "email", "compute:run"}, resolved.Scopes)
 	require.Equal(t, DefaultAudience, resolved.Audience)
 	require.Equal(t, DefaultListenPort, resolved.ListenPort)
+	require.Empty(t, resolved.BaseURL)
+	require.Equal(t, SourceDefault, resolved.Sources.BaseURL)
 	require.Equal(t, SourceDefault, resolved.Sources.IssuerURL)
 	require.Equal(t, SourceDefault, resolved.Sources.ClientID)
 	require.Equal(t, SourceDefault, resolved.Sources.Scopes)
 	require.Equal(t, SourceDefault, resolved.Sources.Audience)
 	require.Equal(t, SourceDefault, resolved.Sources.ListenPort)
+}
+
+func TestSaveProfilePreservesBaseURL(t *testing.T) {
+	setUserDirs(t)
+	require.NoError(t, SaveBaseURL("https://api.customer.example.com"))
+
+	require.NoError(t, SaveProfile(Resolved{
+		IssuerURL: "https://issuer.example.com",
+		ClientID:  "client-123",
+		Scopes:    []string{"openid"},
+	}))
+
+	config, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "https://api.customer.example.com", config.BaseURL)
+}
+
+func TestResolveRejectsInvalidStoredBaseURL(t *testing.T) {
+	setUserDirs(t)
+	require.NoError(t, SaveBaseURL("api.customer.example.com"))
+
+	_, err := resolveErrForArgs(t)
+	require.ErrorContains(t, err, "config base_url")
+	require.ErrorContains(t, err, "missing a scheme")
 }
 
 func TestSaveProfileWritesConfigVersion(t *testing.T) {
@@ -77,10 +125,19 @@ func TestSaveProfileWritesConfigVersion(t *testing.T) {
 func resolveForArgs(t *testing.T, args ...string) Resolved {
 	t.Helper()
 
+	resolved, err := resolveErrForArgs(t, args...)
+	require.NoError(t, err)
+	return resolved
+}
+
+func resolveErrForArgs(t *testing.T, args ...string) (Resolved, error) {
+	t.Helper()
+
 	var captured *cli.Command
 	command := &cli.Command{
 		Name: "boltz-api",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "base-url"},
 			&requestflag.Flag[string]{
 				Name:    "api-key",
 				Sources: cli.EnvVars("BOLTZ_API_KEY"),
@@ -113,9 +170,7 @@ func resolveForArgs(t *testing.T, args ...string) Resolved {
 	require.NoError(t, command.Run(context.Background(), runArgs))
 	require.NotNil(t, captured)
 
-	resolved, err := Resolve(captured)
-	require.NoError(t, err)
-	return resolved
+	return Resolve(captured)
 }
 
 func setUserDirs(t *testing.T) {

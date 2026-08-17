@@ -40,6 +40,7 @@ func TestAuthLoginSubprocessCreatesSession(t *testing.T) {
 	binary := buildCLIBinary(t)
 	env := authProcessEnv(t)
 	env = installFakeBrowserOpener(t, env)
+	require.NoError(t, authconfig.SaveBaseURL("https://api.customer.example.com"))
 	provider := newSubprocessOIDCProvider(t)
 	defer provider.Close()
 
@@ -109,6 +110,10 @@ func TestAuthLoginSubprocessCreatesSession(t *testing.T) {
 	require.Equal(t, true, response["authenticated"])
 	require.Equal(t, "oauth", response["effective_mode"])
 	require.Equal(t, []any{"openid", "email"}, response["granted_scopes"])
+
+	config, err := authconfig.Load()
+	require.NoError(t, err)
+	require.Equal(t, "https://api.customer.example.com", config.BaseURL)
 }
 
 func TestAuthValidateSubprocessClearsInvalidGrantState(t *testing.T) {

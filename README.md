@@ -116,6 +116,7 @@ boltz-api predictions:structure-and-binding start --help
 | Environment variable | Required | Default value |
 | -------------------- | -------- | ------------- |
 | `BOLTZ_API_KEY`      | no       | `null`        |
+| `BOLTZ_BASE_URL`     | no       | stored `base_url`, then the default Boltz API endpoint |
 | `BOLTZ_API_NO_UPDATE_CHECK` | no | `0` |
 
 When run interactively, the CLI checks once per day whether a newer release is
@@ -143,7 +144,7 @@ configured with:
 - `--help` - Show command line usage
 - `--debug` - Enable debug logging (includes HTTP request/response details)
 - `--version`, `-v` - Show the CLI version
-- `--base-url` - Use a custom API backend URL
+- `--base-url` - Use a custom API backend URL for this invocation (overrides `BOLTZ_BASE_URL` and stored configuration)
 - `--format` - Change the output format (`auto`, `explore`, `json`, `jsonl`, `pretty`, `raw`, `yaml`)
 - `--format-error` - Change the output format for errors (`auto`, `explore`, `json`, `jsonl`, `pretty`, `raw`, `yaml`)
 - `--transform` - Transform the data output using [GJSON syntax](https://github.com/tidwall/gjson/blob/master/SYNTAX.md). On paginated or streamed list commands, the transform runs on each item unless you use `--format raw`.
@@ -206,6 +207,7 @@ Available auth commands:
 - `boltz-api auth orgs`
 - `boltz-api auth wait`
 - `boltz-api auth switch-org <org>`
+- `boltz-api config set --base-url "https://api.customer.example.com"`
 - `boltz-api config show`
 - `boltz-api config reset`
 
@@ -217,6 +219,7 @@ Command roles:
 - `auth orgs` - list organization IDs available to the current OAuth session or API key
 - `auth switch-org` - store the OAuth organization ID to send with compute API requests
 - `auth wait` - wait for usable local auth to appear, returning structured `success` or `waiting` status
+- `config set --base-url <url>` - persist the HTTP(S) API base URL used by ordinary commands
 - `config show` - show the path and contents of the local non-secret config file
 - `config reset` - remove the local non-secret config file
 
@@ -227,6 +230,14 @@ using the stored refresh token; `auth wait` stays read-only and polls local auth
 state until usable auth appears or the timeout expires. In API-key mode,
 `auth validate` confirms that an API key is configured locally; it does not
 make a server round-trip.
+
+The API base URL is resolved in this order: the explicit `--base-url` global
+flag, `BOLTZ_BASE_URL`, the `base_url` stored by `config set`, and finally the
+default Boltz API endpoint. For example, configure a tenant endpoint once with:
+
+```sh
+boltz-api config set --base-url "https://api.customer.example.com"
+```
 
 For machine callers that need to wait for a browser-based login to finish:
 

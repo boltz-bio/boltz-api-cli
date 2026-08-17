@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
 	"github.com/boltz-bio/boltz-api-cli/internal/autherror"
@@ -14,10 +15,30 @@ import (
 
 var configCommand = &cli.Command{
 	Name:            "config",
-	Usage:           "Inspect and reset local CLI configuration",
+	Usage:           "Manage local CLI configuration",
 	Suggest:         true,
 	HideHelpCommand: true,
 	Commands: []*cli.Command{
+		{
+			Name:            "set",
+			Usage:           "Persist local CLI configuration values",
+			Action:          handleConfigSet,
+			HideHelpCommand: true,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     "base-url",
+					Usage:    "API base URL to persist for ordinary commands",
+					Required: true,
+					Validator: func(baseURL string) error {
+						trimmed := strings.TrimSpace(baseURL)
+						if trimmed == "" {
+							return errors.New("--base-url must not be empty")
+						}
+						return ValidateBaseURL(trimmed, "--base-url")
+					},
+				},
+			},
+		},
 		{
 			Name:            "show",
 			Usage:           "Show the local non-secret configuration file",
@@ -41,6 +62,7 @@ type configShowResponse struct {
 
 type configFileResponse struct {
 	Version          int      `json:"version,omitempty"`
+	BaseURL          string   `json:"base_url,omitempty"`
 	IssuerURL        string   `json:"issuer_url,omitempty"`
 	ClientID         string   `json:"client_id,omitempty"`
 	Scopes           []string `json:"scopes,omitempty"`
@@ -55,6 +77,26 @@ type configFileResponse struct {
 type configResetResponse struct {
 	Path    string `json:"path"`
 	Removed bool   `json:"removed"`
+}
+
+type configSetResponse struct {
+	Path    string `json:"path"`
+	BaseURL string `json:"base_url"`
+}
+
+func handleConfigSet(ctx context.Context, cmd *cli.Command) error {
+	_ = ctx
+
+	// The flag's Validator has already rejected empty or scheme-less values.
+	baseURL := strings.TrimSpace(cmd.String("base-url"))
+	if err := authconfig.SaveBaseURL(baseURL); err != nil {
+		return autherror.New("config_save_failed", "Failed to persist local CLI configuration", err.Error())
+	}
+	path, err := authstore.ConfigFilePath()
+	if err != nil {
+		return authmodeConfigError(err)
+	}
+	return showJSONValue(cmd, configSetResponse{Path: path, BaseURL: baseURL}, "config set")
 }
 
 func handleConfigShow(ctx context.Context, cmd *cli.Command) error {
@@ -80,6 +122,7 @@ func handleConfigShow(ctx context.Context, cmd *cli.Command) error {
 	if present {
 		response.Config = &configFileResponse{
 			Version:          config.Version,
+			BaseURL:          config.BaseURL,
 			IssuerURL:        config.IssuerURL,
 			ClientID:         config.ClientID,
 			Scopes:           append([]string(nil), config.Scopes...),

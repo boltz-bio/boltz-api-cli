@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
 	"github.com/boltz-bio/boltz-api-cli/internal/jsonview"
 	"github.com/boltz-bio/boltz-api-go/option"
 
@@ -32,10 +33,7 @@ var OutputFormats = []string{"auto", "explore", "json", "jsonl", "pretty", "raw"
 // ValidateBaseURL checks that a base URL is correctly prefixed with a protocol scheme and produces a better
 // error message than the person would see otherwise if it doesn't.
 func ValidateBaseURL(value, source string) error {
-	if value != "" && !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
-		return fmt.Errorf("%s %q is missing a scheme (expected http:// or https://)", source, value)
-	}
-	return nil
+	return authconfig.ValidateBaseURL(value, source)
 }
 
 func getDefaultRequestOptions(cmd *cli.Command) []option.RequestOption {
@@ -53,8 +51,11 @@ func getDefaultRequestOptions(cmd *cli.Command) []option.RequestOption {
 		opts = append(opts, option.WithAPIKey(cmd.String("api-key")))
 	}
 
-	// Override base URL if the --base-url flag is provided
-	if baseURL := cmd.String("base-url"); baseURL != "" {
+	// Explicit flags and BOLTZ_BASE_URL take precedence over the stored value;
+	// an empty result leaves the SDK's existing production default intact. A
+	// resolution error is not surfaced here (this helper cannot fail) — the
+	// per-request middleware runs the same resolution and reports it.
+	if baseURL, _, err := authconfig.ResolveBaseURL(cmd); err == nil && baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
 	}
 
