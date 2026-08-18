@@ -40,7 +40,7 @@ jobs:
     name: build
     permissions:
       contents: read
-    runs-on: ${{ github.repository == 'boltz-bio/boltz-api-cli-staging' && 'namespace-profile-ci-2x4' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository == 'boltz-bio/boltz-api-cli-staging' && 'namespace-profile-ci-4x8' || 'ubuntu-latest' }}
     if: (github.event_name == 'push' || github.event.pull_request.head.repo.fork) && (github.event_name != 'push' || github.event.head_commit.message != 'codegen metadata')
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
