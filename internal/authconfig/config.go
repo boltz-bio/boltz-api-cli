@@ -186,8 +186,8 @@ func Resolve(cmd *cli.Command) (Resolved, error) {
 
 func SaveProfile(resolved Resolved) error {
 	return update(func(config *FileConfig) {
-		// BaseURL is intentionally left untouched: --base-url and BOLTZ_BASE_URL are
-		// invocation-scoped, while only `config set` should change the stored value.
+		// Successful login promotes the complete resolved deployment profile.
+		config.BaseURL = strings.TrimSpace(resolved.BaseURL)
 		config.IssuerURL = strings.TrimSpace(resolved.IssuerURL)
 		config.ClientID = strings.TrimSpace(resolved.ClientID)
 		config.Scopes = normalizeScopes(resolved.Scopes)
@@ -197,13 +197,6 @@ func SaveProfile(resolved Resolved) error {
 		config.UserInfoURL = strings.TrimSpace(resolved.UserInfoURL)
 		config.RevocationURL = strings.TrimSpace(resolved.RevocationURL)
 		config.SelectedOrg = strings.TrimSpace(resolved.SelectedOrg)
-	})
-}
-
-// SaveBaseURL updates the persistent API endpoint without changing auth fields.
-func SaveBaseURL(baseURL string) error {
-	return update(func(config *FileConfig) {
-		config.BaseURL = strings.TrimSpace(baseURL)
 	})
 }
 

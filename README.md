@@ -207,7 +207,6 @@ Available auth commands:
 - `boltz-api auth orgs`
 - `boltz-api auth wait`
 - `boltz-api auth switch-org <org>`
-- `boltz-api config set --base-url "https://api.customer.example.com"`
 - `boltz-api config show`
 - `boltz-api config reset`
 
@@ -219,7 +218,6 @@ Command roles:
 - `auth orgs` - list organization IDs available to the current OAuth session or API key
 - `auth switch-org` - store the OAuth organization ID to send with compute API requests
 - `auth wait` - wait for usable local auth to appear, returning structured `success` or `waiting` status
-- `config set --base-url <url>` - persist the HTTP(S) API base URL used by ordinary commands
 - `config show` - show the path and contents of the local non-secret config file
 - `config reset` - remove the local non-secret config file
 
@@ -232,12 +230,19 @@ state until usable auth appears or the timeout expires. In API-key mode,
 make a server round-trip.
 
 The API base URL is resolved in this order: the explicit `--base-url` global
-flag, `BOLTZ_BASE_URL`, the `base_url` stored by `config set`, and finally the
-default Boltz API endpoint. For example, configure a tenant endpoint once with:
+flag, a non-empty `BOLTZ_BASE_URL`, the stored `base_url`, and finally the
+default Boltz API endpoint. A successful OAuth login persists the resolved API
+base URL alongside its issuer, discovered endpoints, and selected organization:
 
 ```sh
-boltz-api config set --base-url "https://api.customer.example.com"
+boltz-api --base-url "https://api.customer.example.com" \
+  --auth-issuer-url "https://lab.customer.example.com" \
+  auth login
 ```
+
+Outside a successful `auth login`, `--base-url` and `BOLTZ_BASE_URL` remain
+runtime-only overrides and do not mutate the stored profile. API-key-only
+workflows therefore continue to supply the tenant endpoint at runtime.
 
 For machine callers that need to wait for a browser-based login to finish:
 

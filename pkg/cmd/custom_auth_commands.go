@@ -28,7 +28,13 @@ const (
 	defaultAuthWaitPollInterval = 2 * time.Second
 )
 
-var authNow = time.Now
+var (
+	authNow = time.Now
+	// These narrow seams let transaction tests force the post-OAuth config write
+	// to fail and verify that the existing session/token rollback remains intact.
+	authBrowserLogin = oauthclient.Login
+	authSaveProfile  = authconfig.SaveProfile
+)
 
 var authCommand = &cli.Command{
 	Name:            "auth",
@@ -304,7 +310,7 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 	if cmd.Bool("device-code") {
 		result, err = oauthclient.DeviceLogin(ctx, loginConfig)
 	} else {
-		result, err = oauthclient.Login(ctx, loginConfig)
+		result, err = authBrowserLogin(ctx, loginConfig)
 	}
 	if err != nil {
 		return autherror.New("login_failed", "OAuth login failed", err.Error())
@@ -368,7 +374,7 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		if err := authstore.SaveSession(session); err != nil {
 			return struct{}{}, rollback("session_save_failed", "Failed to persist OAuth session", err)
 		}
-		if err := authconfig.SaveProfile(resolved); err != nil {
+		if err := authSaveProfile(resolved); err != nil {
 			return struct{}{}, rollback("config_save_failed", "Failed to persist auth configuration", err)
 		}
 		return struct{}{}, nil

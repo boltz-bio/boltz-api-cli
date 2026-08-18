@@ -59,7 +59,7 @@ func TestRequestOptionsUseStoredBaseURL(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer server.Close()
-	require.NoError(t, authconfig.SaveBaseURL(server.URL))
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{BaseURL: server.URL}))
 
 	cmd := parsedTestCommand(t, "--api-key", "api-key-123", "call")
 	client := githubcomboltzbioboltzcomputeapigo.NewClient(getDefaultRequestOptions(cmd)...)
@@ -73,7 +73,7 @@ func TestRequestOptionsBaseURLPrecedence(t *testing.T) {
 
 	stored := httptest.NewServer(http.NotFoundHandler())
 	defer stored.Close()
-	require.NoError(t, authconfig.SaveBaseURL(stored.URL))
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{BaseURL: stored.URL}))
 
 	var envRequested bool
 	envServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

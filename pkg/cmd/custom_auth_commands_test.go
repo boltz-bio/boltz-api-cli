@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
+	"github.com/boltz-bio/boltz-api-cli/internal/autherror"
 	"github.com/boltz-bio/boltz-api-cli/internal/authstore"
+	"github.com/boltz-bio/boltz-api-cli/internal/oauthclient"
 	"github.com/boltz-bio/boltz-api-cli/internal/requestflag"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v3"
@@ -418,6 +420,87 @@ func TestAuthLoginDoesNotPersistProfileOnFailure(t *testing.T) {
 	require.NoError(t, loadErr)
 	require.Empty(t, config.IssuerURL)
 	require.Empty(t, config.ClientID)
+}
+
+func TestAuthLoginConfigPersistenceFailureRollsBackSessionAndToken(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	useFileOnlyKeyringForAuthCommandTests(t)
+
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+	configPath, err := authstore.ConfigFilePath()
+	require.NoError(t, err)
+	configBefore, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	previousSession := authstore.Session{
+		IssuerURL:   "https://old-issuer.example.com",
+		ClientID:    "old-client",
+		Scopes:      []string{"openid"},
+		AccessToken: "old-access",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(time.Hour),
+		TokenURL:    "https://old-issuer.example.com/token",
+	}
+	require.NoError(t, authstore.SaveSession(previousSession))
+	_, err = authstore.SaveRefreshToken("old-refresh")
+	require.NoError(t, err)
+
+	previousBrowserLogin := authBrowserLogin
+	previousSaveProfile := authSaveProfile
+	t.Cleanup(func() {
+		authBrowserLogin = previousBrowserLogin
+		authSaveProfile = previousSaveProfile
+	})
+	authBrowserLogin = func(context.Context, oauthclient.Config) (*oauthclient.LoginResult, error) {
+		return &oauthclient.LoginResult{
+			Provider: oauthclient.ProviderMetadata{
+				IssuerURL: "https://new-issuer.example.com",
+				TokenURL:  "https://new-issuer.example.com/token",
+			},
+			Tokens: oauthclient.TokenSet{
+				AccessToken:   "new-access",
+				RefreshToken:  "new-refresh",
+				TokenType:     "Bearer",
+				Expiry:        time.Now().Add(2 * time.Hour),
+				GrantedScopes: []string{"openid"},
+			},
+		}, nil
+	}
+	var attemptedProfile authconfig.Resolved
+	authSaveProfile = func(resolved authconfig.Resolved) error {
+		attemptedProfile = resolved
+		return errors.New("forced config persistence failure")
+	}
+
+	_, err = runAuthCommand(t,
+		"--base-url", "https://new-api.example.com",
+		"--auth-issuer-url", "https://new-issuer.example.com",
+		"--auth-client-id", "new-client",
+		"--auth-scope", "openid",
+		"auth", "login",
+	)
+	var authErr *autherror.Error
+	require.ErrorAs(t, err, &authErr)
+	require.Equal(t, "config_save_failed", authErr.Envelope().Code)
+	require.Equal(t, "https://new-api.example.com", attemptedProfile.BaseURL)
+
+	configAfter, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Equal(t, configBefore, configAfter)
+	restoredSession, err := authstore.LoadSession()
+	require.NoError(t, err)
+	require.NotNil(t, restoredSession)
+	require.Equal(t, previousSession.AccessToken, restoredSession.AccessToken)
+	require.Equal(t, previousSession.IssuerURL, restoredSession.IssuerURL)
+	require.Equal(t, previousSession.ClientID, restoredSession.ClientID)
+	restoredToken, _, err := authstore.LoadRefreshToken()
+	require.NoError(t, err)
+	require.Equal(t, "old-refresh", restoredToken)
 }
 
 func TestAuthLoginJSONEventsRequiresDeviceCode(t *testing.T) {

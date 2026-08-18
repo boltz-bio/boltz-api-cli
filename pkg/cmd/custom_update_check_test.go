@@ -43,7 +43,7 @@ func TestShouldRunUpdateCheck(t *testing.T) {
 func TestHasCustomBaseURLIncludesStoredConfig(t *testing.T) {
 	setAuthCommandUserDirs(t)
 	t.Setenv(authconfig.EnvBaseURL, "")
-	require.NoError(t, authconfig.SaveBaseURL("https://api.customer.example.com"))
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{BaseURL: "https://api.customer.example.com"}))
 
 	cmd := parsedTestCommand(t, "call")
 	require.True(t, hasCustomBaseURL(cmd))

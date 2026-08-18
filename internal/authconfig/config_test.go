@@ -11,9 +11,8 @@ import (
 
 func TestResolvePrecedenceAndScopeReplacement(t *testing.T) {
 	setUserDirs(t)
-	require.NoError(t, SaveBaseURL("https://config-api.example.com"))
-
 	require.NoError(t, SaveProfile(Resolved{
+		BaseURL:     "https://config-api.example.com",
 		IssuerURL:   "https://config.example.com",
 		ClientID:    "config-client",
 		Scopes:      []string{"config.read", "config.write"},
@@ -50,7 +49,7 @@ func TestResolvePrecedenceAndScopeReplacement(t *testing.T) {
 
 func TestResolveBaseURLPrecedence(t *testing.T) {
 	setUserDirs(t)
-	require.NoError(t, SaveBaseURL("https://config-api.example.com"))
+	require.NoError(t, SaveProfile(Resolved{BaseURL: "https://config-api.example.com"}))
 
 	resolved := resolveForArgs(t)
 	require.Equal(t, "https://config-api.example.com", resolved.BaseURL)
@@ -84,11 +83,10 @@ func TestResolveFallsBackToBoltzOAuthDefaults(t *testing.T) {
 	require.Equal(t, SourceDefault, resolved.Sources.ListenPort)
 }
 
-func TestSaveProfilePreservesBaseURL(t *testing.T) {
+func TestSaveProfilePersistsBaseURL(t *testing.T) {
 	setUserDirs(t)
-	require.NoError(t, SaveBaseURL("https://api.customer.example.com"))
-
 	require.NoError(t, SaveProfile(Resolved{
+		BaseURL:   "https://api.customer.example.com",
 		IssuerURL: "https://issuer.example.com",
 		ClientID:  "client-123",
 		Scopes:    []string{"openid"},
@@ -101,7 +99,7 @@ func TestSaveProfilePreservesBaseURL(t *testing.T) {
 
 func TestResolveRejectsInvalidStoredBaseURL(t *testing.T) {
 	setUserDirs(t)
-	require.NoError(t, SaveBaseURL("api.customer.example.com"))
+	require.NoError(t, SaveProfile(Resolved{BaseURL: "api.customer.example.com"}))
 
 	_, err := resolveErrForArgs(t)
 	require.ErrorContains(t, err, "config base_url")
