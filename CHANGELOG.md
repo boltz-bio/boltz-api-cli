@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.40.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.39.0...v0.40.0) (2026-08-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** regenerate from reviewed API contract
+
+### Features
+
+* **sdk:** regenerate from reviewed API contract ([7ff88da](https://github.com/boltz-bio/boltz-api-cli/commit/7ff88da5c49dd295a9e8c0d920866ee29b13a906))
+
+
+### Bug Fixes
+
+* **ci:** authenticate staging PR head fetch ([fc597c8](https://github.com/boltz-bio/boltz-api-cli/commit/fc597c88c592760d864fadbf1d5f9d4ed48ffde5))
+* **ci:** evaluate trunk lock per PR ([ac37e48](https://github.com/boltz-bio/boltz-api-cli/commit/ac37e4814ff9f2021441686d59d37526877655e9))
+* **ci:** evaluate trunk lock per PR ([78af4d7](https://github.com/boltz-bio/boltz-api-cli/commit/78af4d704d7d88d72dd302273bf120d3bce62d8f))
+* **ci:** select runners by repository ([e844cf3](https://github.com/boltz-bio/boltz-api-cli/commit/e844cf393a52f18ad2ce70c002929c9e9f2fd5d6))
+* **cli:** expose curated specification listing ([7b14567](https://github.com/boltz-bio/boltz-api-cli/commit/7b14567f74bec4d37f00cb3fd4d4e33941835127))
+
+
+### Chores
+
+* **sdk:** promote generated SDK ([bd0d3d3](https://github.com/boltz-bio/boltz-api-cli/commit/bd0d3d3bc47ecaf5fd2c36a75f8ede758b2624b4))
+* **stlc:** reconcile production into staging ([9d31cef](https://github.com/boltz-bio/boltz-api-cli/commit/9d31cefde29ffed04331905b554135641ec65714))
+* **stlc:** reconcile production into staging ([8133aed](https://github.com/boltz-bio/boltz-api-cli/commit/8133aeda2c169c36c246723c63b8459acbfa8cd3))
+* **stlc:** refresh production reconciliation ([ec5aff0](https://github.com/boltz-bio/boltz-api-cli/commit/ec5aff0aac7d986248dc9ca3c5707cbc371ba091))
+
 ## [0.39.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.38.0...v0.39.0) (2026-08-03)
 
 
