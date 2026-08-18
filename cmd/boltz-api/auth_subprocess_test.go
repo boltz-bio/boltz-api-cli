@@ -36,7 +36,7 @@ func TestAuthStatusSubprocessReturnsJSONAndExitOneWhenUnauthenticated(t *testing
 	require.Equal(t, "none", response["effective_mode"])
 }
 
-func TestAuthLoginSubprocessPersistsDeploymentProfileAndRoutesLaterRequest(t *testing.T) {
+func TestAuthLoginSubprocessPersistsDiscoveredBaseURLAndRoutesLaterRequest(t *testing.T) {
 	binary := buildCLIBinary(t)
 	t.Setenv(authconfig.EnvBaseURL, "")
 	t.Setenv(authconfig.EnvAuthIssuerURL, "")
@@ -44,22 +44,35 @@ func TestAuthLoginSubprocessPersistsDeploymentProfileAndRoutesLaterRequest(t *te
 	env := withoutEnvironment(authProcessEnv(t), authconfig.EnvBaseURL, authconfig.EnvAuthIssuerURL, "BOLTZ_API_KEY")
 	env = installFakeBrowserOpener(t, env)
 
+	type observedRequest struct {
+		path          string
+		authorization string
+	}
 	var requestMu sync.Mutex
-	var requests []*http.Request
+	var requests []observedRequest
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestMu.Lock()
-		requests = append(requests, r.Clone(r.Context()))
+		requests = append(requests, observedRequest{
+			path:          r.URL.Path,
+			authorization: r.Header.Get("Authorization"),
+		})
 		requestMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"latest":"0.39.0","minimum_supported":"0.8.0","update_available":false}`))
 	}))
 	defer apiServer.Close()
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-tenant-api.example.com",
+		IssuerURL: "https://old-tenant-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
 
 	provider := newSubprocessOIDCProvider(t)
 	defer provider.Close()
+	provider.SetComputeAPIBaseURL(apiServer.URL)
 
 	login := runAuthLoginSubprocess(t, binary, env,
-		"--base-url", apiServer.URL,
 		"--auth-issuer-url", provider.IssuerURL(),
 		"--auth-client-id", "client-123",
 		"--auth-scope", "openid",
@@ -91,8 +104,8 @@ func TestAuthLoginSubprocessPersistsDeploymentProfileAndRoutesLaterRequest(t *te
 
 	requestMu.Lock()
 	require.Len(t, requests, 1)
-	require.Equal(t, "/compute/v1/cli/version", requests[0].URL.Path)
-	require.Equal(t, "Bearer login-access", requests[0].Header.Get("Authorization"))
+	require.Equal(t, "/compute/v1/cli/version", requests[0].path)
+	require.Equal(t, "Bearer login-access", requests[0].authorization)
 	requestMu.Unlock()
 }
 
@@ -478,6 +491,7 @@ type subprocessOIDCProvider struct {
 	mu                sync.Mutex
 	discoveryRequests int
 	tokenStatus       int
+	computeAPIBaseURL string
 }
 
 func newSubprocessOIDCProvider(t *testing.T) *subprocessOIDCProvider {
@@ -492,14 +506,19 @@ func newSubprocessOIDCProviderWithTokenStatus(t *testing.T, tokenStatus int) *su
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		provider.mu.Lock()
 		provider.discoveryRequests++
+		computeAPIBaseURL := provider.computeAPIBaseURL
 		provider.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		document := map[string]any{
 			"issuer":                 provider.server.URL,
 			"authorization_endpoint": provider.server.URL + "/authorize",
 			"token_endpoint":         provider.server.URL + "/token",
 			"userinfo_endpoint":      provider.server.URL + "/userinfo",
-		})
+		}
+		if computeAPIBaseURL != "" {
+			document["boltz_compute_api_base_url"] = computeAPIBaseURL
+		}
+		_ = json.NewEncoder(w).Encode(document)
 	})
 	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		callback, err := url.Parse(r.URL.Query().Get("redirect_uri"))
@@ -541,6 +560,12 @@ func (p *subprocessOIDCProvider) Close() {
 
 func (p *subprocessOIDCProvider) IssuerURL() string {
 	return p.server.URL
+}
+
+func (p *subprocessOIDCProvider) SetComputeAPIBaseURL(baseURL string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.computeAPIBaseURL = baseURL
 }
 
 func (p *subprocessOIDCProvider) DiscoveryRequests() int {

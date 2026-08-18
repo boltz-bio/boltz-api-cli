@@ -63,7 +63,7 @@ func authFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:    "auth-issuer-url",
 			Value:   authconfig.DefaultIssuerURL,
-			Usage:   "OIDC issuer URL for OAuth login and bearer-token refresh",
+			Usage:   "OIDC issuer URL for OAuth login, tenant API discovery, and bearer-token refresh",
 			Sources: cli.EnvVars(authconfig.EnvAuthIssuerURL),
 		},
 		&cli.StringFlag{

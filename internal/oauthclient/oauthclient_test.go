@@ -23,6 +23,7 @@ import (
 func TestLoginUsesIDTokenClaimsWhenUserInfoIsUnavailable(t *testing.T) {
 	provider := newMockOIDCProvider(t, false)
 	defer provider.Close()
+	provider.SetComputeAPIBaseURL("https://api.browser.customer.example.com:8443")
 
 	originalOpenBrowser := openBrowser
 	openBrowser = func(target string) error {
@@ -44,6 +45,7 @@ func TestLoginUsesIDTokenClaimsWhenUserInfoIsUnavailable(t *testing.T) {
 	require.Equal(t, []string{"openid", "email"}, result.Tokens.GrantedScopes)
 	require.Equal(t, "user@example.com", result.Identity.Email)
 	require.Equal(t, "Test User", result.Identity.Name)
+	require.Equal(t, "https://api.browser.customer.example.com:8443", result.Provider.ComputeAPIBaseURL)
 	require.Contains(t, output.String(), provider.IssuerURL())
 }
 
@@ -98,6 +100,7 @@ func TestWaitForCallbackTimeoutGivesActionableHint(t *testing.T) {
 func TestDeviceLoginPrintsCodeAndPollsTokenEndpoint(t *testing.T) {
 	provider := newMockOIDCProvider(t, true)
 	defer provider.Close()
+	provider.SetComputeAPIBaseURL("http://127.0.0.1:9443")
 
 	originalOpenBrowser := openBrowser
 	openBrowser = func(target string) error {
@@ -119,6 +122,7 @@ func TestDeviceLoginPrintsCodeAndPollsTokenEndpoint(t *testing.T) {
 	require.Equal(t, "login-refresh", result.Tokens.RefreshToken)
 	require.Equal(t, []string{"openid", "email"}, result.Tokens.GrantedScopes)
 	require.Equal(t, "userinfo@example.com", result.Identity.Email)
+	require.Equal(t, "http://127.0.0.1:9443", result.Provider.ComputeAPIBaseURL)
 	require.Contains(t, output.String(), provider.IssuerURL()+"/device?user_code=WDJB-MJHT")
 	require.Contains(t, output.String(), "WDJB-MJHT")
 	require.Equal(t, "client-123", provider.LastDeviceAuthorizationForm().Get("client_id"))
@@ -126,6 +130,33 @@ func TestDeviceLoginPrintsCodeAndPollsTokenEndpoint(t *testing.T) {
 	require.Equal(t, deviceCodeGrantType, provider.LastTokenForm().Get("grant_type"))
 	require.Equal(t, "device-code-123", provider.LastTokenForm().Get("device_code"))
 	require.Equal(t, "boltz-compute-api", provider.LastTokenForm().Get("resource"))
+}
+
+func TestResolveProviderMetadataOptionalComputeAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected string
+	}{
+		{name: "absent"},
+		{
+			name:     "custom domain and port",
+			baseURL:  "https://api.customer.example.com:8443",
+			expected: "https://api.customer.example.com:8443",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := newMockOIDCProvider(t, true)
+			defer provider.Close()
+			provider.SetComputeAPIBaseURL(test.baseURL)
+
+			metadata, err := ResolveProviderMetadata(context.Background(), Config{IssuerURL: provider.IssuerURL()})
+			require.NoError(t, err)
+			require.Equal(t, test.expected, metadata.ComputeAPIBaseURL)
+		})
+	}
 }
 
 func TestRefreshReturnsRotatedTokens(t *testing.T) {
@@ -186,11 +217,12 @@ func TestRevokePostsTokenToEndpoint(t *testing.T) {
 }
 
 type mockOIDCProvider struct {
-	t                *testing.T
-	server           *httptest.Server
-	signer           jose.Signer
-	publicJWKSetJSON []byte
-	includeUserInfo  bool
+	t                 *testing.T
+	server            *httptest.Server
+	signer            jose.Signer
+	publicJWKSetJSON  []byte
+	includeUserInfo   bool
+	computeAPIBaseURL string
 
 	mu                     sync.Mutex
 	lastNonce              string
@@ -252,6 +284,12 @@ func (p *mockOIDCProvider) IssuerURL() string {
 	return p.server.URL
 }
 
+func (p *mockOIDCProvider) SetComputeAPIBaseURL(baseURL string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.computeAPIBaseURL = baseURL
+}
+
 func (p *mockOIDCProvider) LastAuthorizationPath() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -294,6 +332,12 @@ func (p *mockOIDCProvider) handleDiscovery(w http.ResponseWriter, r *http.Reques
 	}
 	if p.includeUserInfo {
 		document["userinfo_endpoint"] = p.server.URL + "/userinfo"
+	}
+	p.mu.Lock()
+	computeAPIBaseURL := p.computeAPIBaseURL
+	p.mu.Unlock()
+	if computeAPIBaseURL != "" {
+		document["boltz_compute_api_base_url"] = computeAPIBaseURL
 	}
 
 	w.Header().Set("Content-Type", "application/json")

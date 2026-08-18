@@ -30,9 +30,10 @@ const (
 
 var (
 	authNow = time.Now
-	// These narrow seams let transaction tests force the post-OAuth config write
-	// to fail and verify that the existing session/token rollback remains intact.
+	// These narrow seams let login tests cover both OAuth modes and force the
+	// post-OAuth config write to fail so session/token rollback remains verified.
 	authBrowserLogin = oauthclient.Login
+	authDeviceLogin  = oauthclient.DeviceLogin
 	authSaveProfile  = authconfig.SaveProfile
 )
 
@@ -308,12 +309,16 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 
 	var result *oauthclient.LoginResult
 	if cmd.Bool("device-code") {
-		result, err = oauthclient.DeviceLogin(ctx, loginConfig)
+		result, err = authDeviceLogin(ctx, loginConfig)
 	} else {
 		result, err = authBrowserLogin(ctx, loginConfig)
 	}
 	if err != nil {
 		return autherror.New("login_failed", "OAuth login failed", err.Error())
+	}
+	resolved, err = selectLoginBaseURL(resolved, result.Provider.ComputeAPIBaseURL)
+	if err != nil {
+		return err
 	}
 
 	_, err = authstore.WithLock(ctx, func() (struct{}, error) {
@@ -401,6 +406,28 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(writer, "API-key mode is still active for commands in this shell. Clear `--api-key` or `BOLTZ_API_KEY` to use the stored OAuth session.")
 	}
 	return nil
+}
+
+func selectLoginBaseURL(resolved authconfig.Resolved, discovered string) (authconfig.Resolved, error) {
+	if resolved.Sources.BaseURL == authconfig.SourceRuntime {
+		return resolved, nil
+	}
+
+	discovered = strings.TrimSpace(discovered)
+	if discovered == "" {
+		return resolved, nil
+	}
+	if err := authconfig.ValidateBaseURL(discovered, "OIDC discovery boltz_compute_api_base_url"); err != nil {
+		return authconfig.Resolved{}, autherror.New(
+			"invalid_discovered_base_url",
+			"OIDC discovery returned an invalid compute API base URL",
+			err.Error(),
+		)
+	}
+
+	resolved.BaseURL = discovered
+	resolved.Sources.BaseURL = authconfig.SourceDiscovery
+	return resolved, nil
 }
 
 type authLoginEventWriter struct {

@@ -42,6 +42,7 @@ type Source string
 const (
 	SourceUnset        Source = "unset"
 	SourceRuntime      Source = "runtime"
+	SourceDiscovery    Source = "discovery"
 	SourceConfig       Source = "config"
 	SourceDefault      Source = "default"
 	SourceSessionCache Source = "session_cache"

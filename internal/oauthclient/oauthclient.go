@@ -48,6 +48,7 @@ type Config struct {
 
 type ProviderMetadata struct {
 	IssuerURL              string
+	ComputeAPIBaseURL      string
 	AuthorizationURL       string
 	DeviceAuthorizationURL string
 	TokenURL               string
@@ -99,6 +100,7 @@ type RevokeConfig struct {
 
 type discoveryDocument struct {
 	IssuerURL              string   `json:"issuer"`
+	ComputeAPIBaseURL      string   `json:"boltz_compute_api_base_url"`
 	AuthorizationURL       string   `json:"authorization_endpoint"`
 	DeviceAuthorizationURL string   `json:"device_authorization_endpoint"`
 	TokenURL               string   `json:"token_endpoint"`
@@ -491,6 +493,7 @@ func discoverProvider(ctx context.Context, cfg Config) (ProviderMetadata, *oidc.
 
 	metadata := ProviderMetadata{
 		IssuerURL:              strings.TrimSpace(claims.IssuerURL),
+		ComputeAPIBaseURL:      strings.TrimSpace(claims.ComputeAPIBaseURL),
 		AuthorizationURL:       strings.TrimSpace(endpoint.AuthURL),
 		DeviceAuthorizationURL: strings.TrimSpace(claims.DeviceAuthorizationURL),
 		TokenURL:               strings.TrimSpace(endpoint.TokenURL),

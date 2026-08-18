@@ -229,20 +229,32 @@ state until usable auth appears or the timeout expires. In API-key mode,
 `auth validate` confirms that an API key is configured locally; it does not
 make a server round-trip.
 
-The API base URL is resolved in this order: the explicit `--base-url` global
-flag, a non-empty `BOLTZ_BASE_URL`, the stored `base_url`, and finally the
-default Boltz API endpoint. A successful OAuth login persists the resolved API
-base URL alongside its issuer, discovered endpoints, and selected organization:
+For tenant setup, provide the issuer once. If its OIDC discovery document
+includes `boltz_compute_api_base_url`, a successful login validates and stores
+that API endpoint alongside the issuer and OAuth profile:
 
 ```sh
-boltz-api --base-url "https://api.customer.example.com" \
+boltz-api --auth-issuer-url "https://lab.customer.example.com" \
+  auth login
+```
+
+The discovery field is optional, so issuers that omit it preserve the existing
+stored endpoint or the SDK default. During login, base-URL precedence is an
+explicit `--base-url` or non-empty `BOLTZ_BASE_URL`, then issuer discovery, then
+stored `base_url`, then the SDK default. For example, use the explicit flag as
+an escape hatch when an issuer advertises the wrong endpoint:
+
+```sh
+boltz-api --base-url "https://api.override.example.com" \
   --auth-issuer-url "https://lab.customer.example.com" \
   auth login
 ```
 
-Outside a successful `auth login`, `--base-url` and `BOLTZ_BASE_URL` remain
-runtime-only overrides and do not mutate the stored profile. API-key-only
-workflows therefore continue to supply the tenant endpoint at runtime.
+For ordinary commands, resolution remains `--base-url`, non-empty
+`BOLTZ_BASE_URL`, stored `base_url`, then the SDK default. Outside a successful
+`auth login`, the flag and environment variable are runtime-only and do not
+mutate the stored profile. API-key-only workflows therefore continue to supply
+the tenant endpoint at runtime.
 
 For machine callers that need to wait for a browser-based login to finish:
 

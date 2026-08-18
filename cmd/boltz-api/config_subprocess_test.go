@@ -16,4 +16,8 @@ func TestConfigHelpOmitsSetSubprocess(t *testing.T) {
 	require.Contains(t, result.Stdout, "reset")
 	require.NotContains(t, result.Stdout, "\n   set ")
 	require.NotContains(t, result.Stdout, "Persist local CLI configuration")
+
+	rootHelp := runCLI(t, binary, env, "--help")
+	require.Equal(t, 0, rootHelp.ExitCode, rootHelp.Stderr)
+	require.Contains(t, rootHelp.Stdout, "OIDC issuer URL for OAuth login, tenant API discovery, and bearer-token refresh")
 }
