@@ -118,7 +118,7 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 	"input": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.entities",
-			Usage:      "Entities (proteins, RNA, DNA, ligands) forming the complex to predict. Order determines chain assignment.",
+			Usage:      "Entities (proteins, RNA, DNA, ligands, and glycans) forming the complex to predict. Order determines chain assignment.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[map[string]any]{
@@ -127,12 +127,12 @@ var predictionsStructureAndBindingEstimateCost = requestflag.WithInnerFlags(cli.
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.bonds",
-			Usage:      "Bond constraints between atoms. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Request-level covalent bonds between atoms. Use ccd_atom with a glycan residue ID, smiles_atom with a numeric SMILES atom-map, or ligand_atom for a single-residue ligand. Internal glycan bonds belong in the glycan entity bonds field.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{
@@ -186,7 +186,7 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 	"input": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.entities",
-			Usage:      "Entities (proteins, RNA, DNA, ligands) forming the complex to predict. Order determines chain assignment.",
+			Usage:      "Entities (proteins, RNA, DNA, ligands, and glycans) forming the complex to predict. Order determines chain assignment.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[map[string]any]{
@@ -195,12 +195,12 @@ var predictionsStructureAndBindingStart = requestflag.WithInnerFlags(cli.Command
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.bonds",
-			Usage:      "Bond constraints between atoms. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Request-level covalent bonds between atoms. Use ccd_atom with a glycan residue ID, smiles_atom with a numeric SMILES atom-map, or ligand_atom for a single-residue ligand. Internal glycan bonds belong in the glycan entity bonds field.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "input.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{

@@ -57,7 +57,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "estimate-cost",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -75,7 +75,7 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"predictions:structure-and-binding", "estimate-cost",
 			"--input.entities", "[{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}]",
 			"--input.binding", "{binder_chain_id: binder_chain_id, type: ligand_protein_binding}",
-			"--input.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}]",
+			"--input.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}}]",
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}",
 			"--input.num-samples", "1",
@@ -113,11 +113,13 @@ func TestPredictionsStructureAndBindingEstimateCost(t *testing.T) {
 			"    - atom1:\n" +
 			"        atom_name: atom_name\n" +
 			"        chain_id: chain_id\n" +
-			"        type: ligand_atom\n" +
+			"        residue_index: 0\n" +
+			"        type: polymer_atom\n" +
 			"      atom2:\n" +
 			"        atom_name: atom_name\n" +
 			"        chain_id: chain_id\n" +
-			"        type: ligand_atom\n" +
+			"        residue_index: 0\n" +
+			"        type: polymer_atom\n" +
 			"  constraints:\n" +
 			"    - binder_chain_id: binder_chain_id\n" +
 			"      contact_residues:\n" +
@@ -162,7 +164,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			t,
 			"--api-key", "string",
 			"predictions:structure-and-binding", "start",
-			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
+			"--input", "{entities: [{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}], binding: {binder_chain_id: binder_chain_id, type: ligand_protein_binding}, bonds: [{atom1: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}}], constraints: [{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}], model_options: {recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}, num_samples: 1, templates: [{template_chains: [{input_chain_id: input_chain_id, template_chain_id: template_chain_id}], template_structure: {type: url, url: https://example.com}, force_threshold_angstroms: 0}]}",
 			"--model", "boltz-2.1",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
@@ -180,7 +182,7 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"predictions:structure-and-binding", "start",
 			"--input.entities", "[{chain_ids: [string], type: protein, value: value, cyclic: true, modifications: [{residue_index: 0, type: ccd, value: value}], msa: {format: a3m, source: {type: url, url: https://example.com}, type: custom}}]",
 			"--input.binding", "{binder_chain_id: binder_chain_id, type: ligand_protein_binding}",
-			"--input.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, type: ligand_atom}}]",
+			"--input.bonds", "[{atom1: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}, atom2: {atom_name: atom_name, chain_id: chain_id, residue_index: 0, type: polymer_atom}}]",
 			"--input.constraints", "[{binder_chain_id: binder_chain_id, contact_residues: {A: [42, 43, 44, 67, 68, 69]}, max_distance_angstrom: 0, type: pocket, force: true}]",
 			"--input.model-options", "{recycling_steps: 1, sampling_steps: 50, step_scale: 1.3}",
 			"--input.num-samples", "1",
@@ -218,11 +220,13 @@ func TestPredictionsStructureAndBindingStart(t *testing.T) {
 			"    - atom1:\n" +
 			"        atom_name: atom_name\n" +
 			"        chain_id: chain_id\n" +
-			"        type: ligand_atom\n" +
+			"        residue_index: 0\n" +
+			"        type: polymer_atom\n" +
 			"      atom2:\n" +
 			"        atom_name: atom_name\n" +
 			"        chain_id: chain_id\n" +
-			"        type: ligand_atom\n" +
+			"        residue_index: 0\n" +
+			"        type: polymer_atom\n" +
 			"  constraints:\n" +
 			"    - binder_chain_id: binder_chain_id\n" +
 			"      contact_residues:\n" +

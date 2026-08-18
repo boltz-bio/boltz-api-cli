@@ -129,17 +129,17 @@ var smallMoleculeDesignEstimateCost = requestflag.WithInnerFlags(cli.Command{
 	"target": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.entities",
-			Usage:      "Protein entities defining the target structure. Each entity represents a protein chain.",
+			Usage:      "Protein and glycan entities defining the target structure. At least one protein entity is required.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.bonds",
-			Usage:      "Covalent bond constraints between atoms in the target complex. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Covalent bond constraints between atoms in the target complex. Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{
@@ -277,17 +277,17 @@ var smallMoleculeDesignStart = requestflag.WithInnerFlags(cli.Command{
 	"target": {
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.entities",
-			Usage:      "Protein entities defining the target structure. Each entity represents a protein chain.",
+			Usage:      "Protein and glycan entities defining the target structure. At least one protein entity is required.",
 			InnerField: "entities",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.bonds",
-			Usage:      "Covalent bond constraints between atoms in the target complex. Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Covalent bond constraints between atoms in the target complex. Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "bonds",
 		},
 		&requestflag.InnerFlag[[]map[string]any]{
 			Name:       "target.constraints",
-			Usage:      "Structural constraints (pocket and contact). Atom-level ligand references currently support ligand_ccd only; ligand_smiles is unsupported.",
+			Usage:      "Structural constraints (pocket and contact). Ligand atom references support CCD atom names and explicitly atom-mapped SMILES atoms.",
 			InnerField: "constraints",
 		},
 		&requestflag.InnerFlag[map[string]any]{

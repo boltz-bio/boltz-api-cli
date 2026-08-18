@@ -166,7 +166,7 @@ var adminWorkspacesArchive = cli.Command{
 
 var adminWorkspacesRetrieveSpendingLimit = cli.Command{
 	Name:    "retrieve-spending-limit",
-	Usage:   "Get a workspace spending limit",
+	Usage:   "Return the lifetime spending limit and accrued usage for a workspace, or null\nwhen no workspace-level limit is configured. Admin API keys can read any\nworkspace in their organization; a workspace key can read its own limit.",
 	Suggest: true,
 	Flags: []cli.Flag{
 		&requestflag.Flag[string]{
@@ -181,7 +181,7 @@ var adminWorkspacesRetrieveSpendingLimit = cli.Command{
 
 var adminWorkspacesSetSpendingLimit = requestflag.WithInnerFlags(cli.Command{
 	Name:    "set-spending-limit",
-	Usage:   "Set a workspace spending limit",
+	Usage:   "Create or replace the absolute lifetime spending ceiling for a workspace.\nTracking starts when the limit is first configured. The new limit cannot be\nlower than accrued usage plus spend reserved by active work. Requires an admin\nAPI key.",
 	Suggest: true,
 	Flags: []cli.Flag{
 		&requestflag.Flag[string]{
@@ -208,7 +208,7 @@ var adminWorkspacesSetSpendingLimit = requestflag.WithInnerFlags(cli.Command{
 	"limit": {
 		&requestflag.InnerFlag[int64]{
 			Name:       "limit.amount",
-			Usage:      "Workspace spending limit amount in milli-USD. Tracking starts when the limit is configured; prior or already-committed unreserved work is not counted in this workspace cap ledger.",
+			Usage:      "Workspace spending limit amount in milli-USD. Tracking starts when the limit is configured; prior or already-committed unreserved work is not counted in this workspace cap ledger. An amount of 9007199254740991 (2^53 - 1) is the unlimited sentinel: usage is tracked but never blocked, and amounts at or above half the sentinel are normalized to it.",
 			InnerField: "amount",
 		},
 		&requestflag.InnerFlag[string]{
