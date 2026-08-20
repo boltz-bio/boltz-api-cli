@@ -139,6 +139,18 @@ func init() {
 				},
 			},
 			{
+				Name:     "small-molecule:explore",
+				Category: "API RESOURCE",
+				Suggest:  true,
+				Commands: []*cli.Command{
+					&smallMoleculeExploreRetrieve,
+					&smallMoleculeExploreListResults,
+					&smallMoleculeExploreResume,
+					&smallMoleculeExploreStart,
+					&smallMoleculeExploreStop,
+				},
+			},
+			{
 				Name:     "protein:design",
 				Category: "API RESOURCE",
 				Suggest:  true,

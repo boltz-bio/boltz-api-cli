@@ -285,7 +285,7 @@ var downloadPipelineAdapters = map[downloadRunType]downloadPipelineAdapter{
 			if err != nil {
 				return downloadPipelinePage{}, err
 			}
-			return normalizePipelinePage(response, func(result boltzapi.ProteinDesignListResultsResponse) downloadPipelineResultInfo {
+			return normalizePipelinePage(response, func(result boltzapi.ProteinDesignListResultsResponseUnion) downloadPipelineResultInfo {
 				return newDownloadPipelineResultInfo(result.ID, result.Artifacts.Archive.URL, result.RawJSON())
 			}), nil
 		},
