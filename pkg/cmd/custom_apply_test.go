@@ -200,6 +200,127 @@ func TestAddMergedInputFlagDerivesInnerFlagsFromTopLevelBodyFlags(t *testing.T) 
 	require.NoError(t, requestflag.CheckInnerFlags(*cmd))
 }
 
+func TestCustomizeProteinDesignModeFlagsSupportsLegacyAndDiscriminatedRequests(t *testing.T) {
+	t.Parallel()
+
+	for _, commandName := range []string{"estimate-cost", "start"} {
+		commandName := commandName
+		t.Run(commandName, func(t *testing.T) {
+			t.Parallel()
+
+			modeFlag := &requestflag.Flag[string]{
+				Name:     "type",
+				Usage:    `Allowed values: "binder".`,
+				Default:  "binder",
+				Const:    true,
+				BodyPath: "type",
+			}
+			requestCommand := &cli.Command{
+				Name:  commandName,
+				Flags: []cli.Flag{modeFlag},
+			}
+			root := &cli.Command{
+				Name: "boltz-api",
+				Commands: []*cli.Command{
+					{
+						Name:     "protein:design",
+						Commands: []*cli.Command{requestCommand},
+					},
+				},
+			}
+
+			customizeProteinDesignModeFlags(root)
+
+			require.Empty(t, modeFlag.Default)
+			require.Empty(t, modeFlag.DefaultText)
+			require.False(t, modeFlag.Const)
+			require.Equal(t, proteinDesignModeUsage, modeFlag.Usage)
+			require.NoError(t, modeFlag.Validator(""))
+			require.NoError(t, modeFlag.Validator("binder"))
+			require.NoError(t, modeFlag.Validator("generic"))
+			require.EqualError(t, modeFlag.Validator("invalid"), "type must be one of: binder, generic")
+
+			require.NoError(t, modeFlag.PreParse())
+			require.False(t, modeFlag.IsSet(), "legacy requests must omit the discriminator")
+		})
+	}
+}
+
+func TestGeneratedProteinDesignCommandsExposeBothRequestModes(t *testing.T) {
+	t.Parallel()
+
+	ApplyCustomizations(Command)
+
+	for _, commandName := range []string{"estimate-cost", "start"} {
+		requestCommand := mustFindCommand(t, Command, "protein:design", commandName)
+		modeFlag, ok := mustFindFlag(t, requestCommand, "type").(*requestflag.Flag[string])
+		require.True(t, ok)
+		require.Empty(t, modeFlag.Default)
+		require.False(t, modeFlag.Const)
+		require.Contains(t, modeFlag.Usage, proteinDesignModeUsage)
+		mustFindFlag(t, requestCommand, "binder")
+		mustFindFlag(t, requestCommand, "entity")
+		mustFindFlag(t, requestCommand, "input.type")
+	}
+}
+
+func TestProteinDesignModeFlagDoesNotOverwriteMergedInput(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		input    string
+		wantType any
+	}{
+		{
+			name:     "legacy request omits discriminator",
+			input:    `{"binder_specification":{"type":"no_template"},"target":{"sequence":"ACDE"}}`,
+			wantType: nil,
+		},
+		{
+			name:     "generic request keeps input discriminator",
+			input:    `{"type":"generic","entities":[]}`,
+			wantType: "generic",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			modeFlag := &requestflag.Flag[string]{
+				Name:     "type",
+				Default:  "binder",
+				Const:    true,
+				BodyPath: "type",
+			}
+			requestCommand := &cli.Command{Name: "start", Flags: []cli.Flag{modeFlag}}
+			root := &cli.Command{
+				Commands: []*cli.Command{{
+					Name:     "protein:design",
+					Commands: []*cli.Command{requestCommand},
+				}},
+			}
+
+			customizeProteinDesignModeFlags(root)
+			addMergedInputFlag(requestCommand, mergedInputUsage)
+
+			inputFlag, ok := findFlag(requestCommand, "input").(*requestflag.Flag[map[string]any])
+			require.True(t, ok)
+			require.NoError(t, inputFlag.PreParse())
+			require.NoError(t, modeFlag.PreParse())
+			require.NoError(t, inputFlag.Set("input", tc.input))
+
+			body, ok := requestflag.ExtractRequestContents(requestCommand).Body.(map[string]any)
+			require.True(t, ok)
+			if tc.wantType == nil {
+				require.NotContains(t, body, "type")
+			} else {
+				require.Equal(t, tc.wantType, body["type"])
+			}
+		})
+	}
+}
+
 func TestTransformUsageMentionsPerItemListBehavior(t *testing.T) {
 	t.Parallel()
 

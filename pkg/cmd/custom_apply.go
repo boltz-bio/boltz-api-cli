@@ -50,6 +50,7 @@ func ApplyCustomizations(app *cli.Command) {
 		app.Commands = append(app.Commands, downloadResultsCommand)
 	}
 
+	customizeProteinDesignModeFlags(app)
 	addMergedInputFlags(app)
 	addRunCommands(app)
 	addProteinDesignCuratedSpecificationsCommand(app)
@@ -172,6 +173,54 @@ var mergedInputCommandPaths = [][]string{
 var mergedInputExcludedBodyFields = map[string]struct{}{
 	"idempotency_key": {},
 	"workspace_id":    {},
+}
+
+var proteinDesignRequestCommandPaths = [][]string{
+	{"protein:design", "estimate-cost"},
+	{"protein:design", "start"},
+}
+
+const proteinDesignModeUsage = `Protein design mode: "binder" or "generic". Omit for legacy binder requests that use --binder-specification and --target.`
+
+func customizeProteinDesignModeFlags(app *cli.Command) {
+	for _, path := range proteinDesignRequestCommandPaths {
+		cmd := findCommandByPath(app, path...)
+		if cmd == nil {
+			continue
+		}
+
+		modeFlag, ok := findFlagByName(cmd, "type").(*requestflag.Flag[string])
+		if !ok || modeFlag.BodyPath != "type" {
+			continue
+		}
+
+		// Stainless flattens this compatibility union into one command and currently
+		// models the first discriminated branch as a constant. Keep the discriminator
+		// optional for legacy requests and let callers select either new request mode.
+		modeFlag.Default = ""
+		modeFlag.DefaultText = ""
+		modeFlag.Const = false
+		modeFlag.Usage = proteinDesignModeUsage
+		modeFlag.Validator = validateProteinDesignMode
+	}
+}
+
+func findFlagByName(cmd *cli.Command, name string) cli.Flag {
+	for _, flag := range cmd.Flags {
+		if canonicalFlagName(flag) == name {
+			return flag
+		}
+	}
+	return nil
+}
+
+func validateProteinDesignMode(mode string) error {
+	switch mode {
+	case "", "binder", "generic":
+		return nil
+	default:
+		return fmt.Errorf("type must be one of: binder, generic")
+	}
 }
 
 func addMergedInputFlags(app *cli.Command) {

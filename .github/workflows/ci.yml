@@ -36,7 +36,7 @@ jobs:
         run: ./scripts/lint
 
   build:
-    timeout-minutes: 10
+    timeout-minutes: 20
     name: build
     permissions:
       contents: read
@@ -54,7 +54,7 @@ jobs:
         uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
         with:
           version: latest
-          args: release --snapshot --clean --skip=publish
+          args: release --snapshot --clean --skip=publish --parallelism 1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -103,7 +103,7 @@ var smallMoleculeDesignEstimateCost = requestflag.WithInnerFlags(cli.Command{
 		},
 		&requestflag.Flag[string]{
 			Name:     "chemical-space",
-			Usage:    "Chemical space to constrain generated molecules. Use 'enamine_real' for the Enamine REAL chemical space or 'none' to disable chemical-space filtering.",
+			Usage:    "Chemical space to constrain generated molecules. Use 'enamine_real' for the Enamine REAL chemical space, 'wuxi_galaxi' for the WuXi GalaXi chemical space when enabled for your organization, or 'none' to disable chemical-space filtering.",
 			Default:  "enamine_real",
 			BodyPath: "chemical_space",
 		},
@@ -251,7 +251,7 @@ var smallMoleculeDesignStart = requestflag.WithInnerFlags(cli.Command{
 		},
 		&requestflag.Flag[string]{
 			Name:     "chemical-space",
-			Usage:    "Chemical space to constrain generated molecules. Use 'enamine_real' for the Enamine REAL chemical space or 'none' to disable chemical-space filtering.",
+			Usage:    "Chemical space to constrain generated molecules. Use 'enamine_real' for the Enamine REAL chemical space, 'wuxi_galaxi' for the WuXi GalaXi chemical space when enabled for your organization, or 'none' to disable chemical-space filtering.",
 			Default:  "enamine_real",
 			BodyPath: "chemical_space",
 		},

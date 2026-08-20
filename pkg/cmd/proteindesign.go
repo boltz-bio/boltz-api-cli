@@ -84,15 +84,14 @@ var proteinDesignDeleteData = cli.Command{
 	HideHelpCommand: true,
 }
 
-var proteinDesignEstimateCost = cli.Command{
+var proteinDesignEstimateCost = requestflag.WithInnerFlags(cli.Command{
 	Name:    "estimate-cost",
 	Usage:   "Estimate the cost of a protein design run without creating any resource or\nconsuming GPU.",
 	Suggest: true,
 	Flags: []cli.Flag{
 		&requestflag.Flag[map[string]any]{
 			Name:     "binder-specification",
-			Usage:    "Binder specification for protein design. Use no_template for sequence-defined binders, structure_template for uploaded binder structures, or boltz_curated for Boltz-managed nanobody and antibody defaults.",
-			Required: true,
+			Usage:    "Binder specification for protein design. Use no_template for sequence-defined binders, structure_template for uploaded binder structures, boltz_curated for Boltz-managed nanobody and antibody defaults, or uniformly_sampled_specifications to sample uniformly across multiple binder specifications.",
 			BodyPath: "binder_specification",
 		},
 		&requestflag.Flag[int64]{
@@ -104,7 +103,6 @@ var proteinDesignEstimateCost = cli.Command{
 		&requestflag.Flag[map[string]any]{
 			Name:     "target",
 			Usage:    "Target specification (structure template or template-free)",
-			Required: true,
 			BodyPath: "target",
 		},
 		&requestflag.Flag[string]{
@@ -117,10 +115,51 @@ var proteinDesignEstimateCost = cli.Command{
 			Usage:    "Target workspace ID (admin keys only; ignored for workspace keys)",
 			BodyPath: "workspace_id",
 		},
+		&requestflag.Flag[map[string]any]{
+			Name:     "binder",
+			BodyPath: "binder",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "template",
+			BodyPath: "templates",
+		},
+		&requestflag.Flag[string]{
+			Name:     "type",
+			Usage:    `Allowed values: "binder".`,
+			Default:  "binder",
+			Const:    true,
+			BodyPath: "type",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "global-design-filter",
+			Usage:    "Filters applied to every designed region. When omitted, cysteine is excluded. Pass [] to disable global filters.",
+			BodyPath: "global_design_filters",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "entity",
+			BodyPath: "entities",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "bond",
+			BodyPath: "bonds",
+		},
 	},
 	Action:          handleProteinDesignEstimateCost,
 	HideHelpCommand: true,
-}
+}, map[string][]requestflag.HasOuterFlag{
+	"bond": {
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "bond.atom1",
+			Usage:      "Atom reference for a specific CCD residue in a glycan graph.",
+			InnerField: "atom1",
+		},
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "bond.atom2",
+			Usage:      "Atom reference for a specific CCD residue in a glycan graph.",
+			InnerField: "atom2",
+		},
+	},
+})
 
 var proteinDesignListResults = cli.Command{
 	Name:    "list-results",
@@ -182,15 +221,14 @@ var proteinDesignResume = cli.Command{
 	HideHelpCommand: true,
 }
 
-var proteinDesignStart = cli.Command{
+var proteinDesignStart = requestflag.WithInnerFlags(cli.Command{
 	Name:    "start",
-	Usage:   "Create a new design run that generates novel protein binder candidates",
+	Usage:   "Create a binder or generic protein design run. Generic runs may include\n`fusion_protein` entities. The deprecated legacy binder request remains accepted\nduring migration.",
 	Suggest: true,
 	Flags: []cli.Flag{
 		&requestflag.Flag[map[string]any]{
 			Name:     "binder-specification",
-			Usage:    "Binder specification for protein design. Use no_template for sequence-defined binders, structure_template for uploaded binder structures, or boltz_curated for Boltz-managed nanobody and antibody defaults.",
-			Required: true,
+			Usage:    "Binder specification for protein design. Use no_template for sequence-defined binders, structure_template for uploaded binder structures, boltz_curated for Boltz-managed nanobody and antibody defaults, or uniformly_sampled_specifications to sample uniformly across multiple binder specifications.",
 			BodyPath: "binder_specification",
 		},
 		&requestflag.Flag[int64]{
@@ -202,7 +240,6 @@ var proteinDesignStart = cli.Command{
 		&requestflag.Flag[map[string]any]{
 			Name:     "target",
 			Usage:    "Target specification (structure template or template-free)",
-			Required: true,
 			BodyPath: "target",
 		},
 		&requestflag.Flag[string]{
@@ -215,10 +252,51 @@ var proteinDesignStart = cli.Command{
 			Usage:    "Target workspace ID (admin keys only; ignored for workspace keys)",
 			BodyPath: "workspace_id",
 		},
+		&requestflag.Flag[map[string]any]{
+			Name:     "binder",
+			BodyPath: "binder",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "template",
+			BodyPath: "templates",
+		},
+		&requestflag.Flag[string]{
+			Name:     "type",
+			Usage:    `Allowed values: "binder".`,
+			Default:  "binder",
+			Const:    true,
+			BodyPath: "type",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "global-design-filter",
+			Usage:    "Filters applied to every designed region. When omitted, cysteine is excluded. Pass [] to disable global filters.",
+			BodyPath: "global_design_filters",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "entity",
+			BodyPath: "entities",
+		},
+		&requestflag.Flag[[]map[string]any]{
+			Name:     "bond",
+			BodyPath: "bonds",
+		},
 	},
 	Action:          handleProteinDesignStart,
 	HideHelpCommand: true,
-}
+}, map[string][]requestflag.HasOuterFlag{
+	"bond": {
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "bond.atom1",
+			Usage:      "Atom reference for a specific CCD residue in a glycan graph.",
+			InnerField: "atom1",
+		},
+		&requestflag.InnerFlag[map[string]any]{
+			Name:       "bond.atom2",
+			Usage:      "Atom reference for a specific CCD residue in a glycan graph.",
+			InnerField: "atom2",
+		},
+	},
+})
 
 var proteinDesignStop = cli.Command{
 	Name:    "stop",
