@@ -61,7 +61,7 @@ func TestProteinSequenceRedesignEstimateCost(t *testing.T) {
 			"--num-proteins", "1",
 			"--structure", "{type: url, url: https://example.com}",
 			"--type", "binder",
-			"--global-design-filter", "{amino_acids: [x], type: excluded_amino_acids}",
+			"--global-design-filter", "{amino_acids: [I], type: excluded_amino_acids}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -84,7 +84,7 @@ func TestProteinSequenceRedesignEstimateCost(t *testing.T) {
 			"type: binder\n" +
 			"global_design_filters:\n" +
 			"  - amino_acids:\n" +
-			"      - x\n" +
+			"      - I\n" +
 			"    type: excluded_amino_acids\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")
@@ -138,7 +138,7 @@ func TestProteinSequenceRedesignStart(t *testing.T) {
 			"--num-proteins", "1",
 			"--structure", "{type: url, url: https://example.com}",
 			"--type", "binder",
-			"--global-design-filter", "{amino_acids: [x], type: excluded_amino_acids}",
+			"--global-design-filter", "{amino_acids: [I], type: excluded_amino_acids}",
 			"--idempotency-key", "idempotency_key",
 			"--workspace-id", "workspace_id",
 		)
@@ -161,7 +161,7 @@ func TestProteinSequenceRedesignStart(t *testing.T) {
 			"type: binder\n" +
 			"global_design_filters:\n" +
 			"  - amino_acids:\n" +
-			"      - x\n" +
+			"      - I\n" +
 			"    type: excluded_amino_acids\n" +
 			"idempotency_key: idempotency_key\n" +
 			"workspace_id: workspace_id\n")

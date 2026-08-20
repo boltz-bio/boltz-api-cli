@@ -3,7 +3,7 @@ module github.com/boltz-bio/boltz-api-cli
 go 1.25.0
 
 require (
-	github.com/boltz-bio/boltz-api-go v0.35.0
+	github.com/boltz-bio/boltz-api-go v0.35.1-0.20260820132924-c3356ea2d3d5
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
