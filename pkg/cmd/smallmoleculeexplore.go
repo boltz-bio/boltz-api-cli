@@ -101,13 +101,13 @@ var smallMoleculeExploreStart = requestflag.WithInnerFlags(cli.Command{
 	Flags: []cli.Flag{
 		&requestflag.Flag[int64]{
 			Name:     "budget",
-			Usage:    "How many molecules to score. Must not exceed the accepted library size or 3,000,000.",
+			Usage:    "How many molecules to score. Must not exceed the accepted library size or 4,000,000.",
 			Required: true,
 			BodyPath: "budget",
 		},
 		&requestflag.Flag[map[string]any]{
 			Name:     "library",
-			Usage:    "CSV or TSV molecule library, limited to 250 MiB and 3,000,000 data records. URL sources can use the full file limit. Base64 sources are also subject to the API's 50 MiB JSON request-body limit, so use a URL source for larger files. The file must be UTF-8 and may contain only the selected SMILES and ID columns; column order does not matter. Candidate IDs are limited to 1,024 UTF-8 bytes; missing or blank IDs default to the zero-based data-record index.",
+			Usage:    "CSV or TSV molecule library, limited to 300 MiB and 4,000,000 data records. URL sources can use the full file limit. Base64 sources are also subject to the API's 50 MiB JSON request-body limit, so use a URL source for larger files. The file must be UTF-8 and may contain only the selected SMILES and ID columns; column order does not matter. Candidate IDs are limited to 1,024 UTF-8 bytes; missing or blank IDs default to the zero-based data-record index.",
 			Required: true,
 			BodyPath: "library",
 		},
