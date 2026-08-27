@@ -101,7 +101,7 @@ var smallMoleculeExploreStart = requestflag.WithInnerFlags(cli.Command{
 	Flags: []cli.Flag{
 		&requestflag.Flag[int64]{
 			Name:     "budget",
-			Usage:    "How many molecules to score. Must not exceed the accepted library size or 5,000,000.",
+			Usage:    "How many molecules to score. Each is chosen using everything scored before it, so a run recovers far more of the library's best-scoring molecules than screening the same number blindly. Scoring around 7% of the library is where that advantage is clearest. Must not exceed the accepted library size or 5,000,000.",
 			Required: true,
 			BodyPath: "budget",
 		},
