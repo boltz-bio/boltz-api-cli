@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.42.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.41.0...v0.42.0) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** regenerate from reviewed API contract
+* **sdk:** regenerate from reviewed API contract
+* **sdk:** regenerate from reviewed API contract
+* **sdk:** regenerate from reviewed API contract
+
+### Features
+
+* **sdk:** regenerate from reviewed API contract ([776612d](https://github.com/boltz-bio/boltz-api-cli/commit/776612dcd1f9a7e9fc70468460442ece52407fb5))
+* **sdk:** regenerate from reviewed API contract ([e45f3f0](https://github.com/boltz-bio/boltz-api-cli/commit/e45f3f0b8ac17e3bfd8f1126016a177fe3ff1f5f))
+* **sdk:** regenerate from reviewed API contract ([6fa1baa](https://github.com/boltz-bio/boltz-api-cli/commit/6fa1baa567250aad7b9f4bf2a5b22fa6143d2449))
+* **sdk:** regenerate from reviewed API contract ([6ecd476](https://github.com/boltz-bio/boltz-api-cli/commit/6ecd47615a6750349746910031a595a87e0281ea))
+
+
+### Chores
+
+* **sdk:** promote generated SDK ([730fca0](https://github.com/boltz-bio/boltz-api-cli/commit/730fca0457d0fd1fdcc97cf992446e23aaa39cda))
+* **sdk:** promote generated SDK ([62da250](https://github.com/boltz-bio/boltz-api-cli/commit/62da250a5cce43b44ee321628420578a7edb38c1))
+* **sdk:** promote generated SDK ([1d284ff](https://github.com/boltz-bio/boltz-api-cli/commit/1d284ff0815f944bf2a7ea1f7da885232a06462e))
+* **sdk:** promote generated SDK ([6a2bad9](https://github.com/boltz-bio/boltz-api-cli/commit/6a2bad9803655b7ad84efdfb7c85d3e7802e7234))
+
 ## [0.41.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.40.0...v0.41.0) (2026-08-20)
 
 
