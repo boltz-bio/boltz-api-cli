@@ -2,6 +2,7 @@ package authconfig
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -23,6 +24,7 @@ const (
 	EnvAuthRevocationURL    = "BOLTZ_API_AUTH_REVOCATION_URL"
 	EnvOrg                  = "BOLTZ_API_ORG"
 	EnvListenPort           = "BOLTZ_API_LISTEN_PORT"
+	EnvBaseURL              = "BOLTZ_BASE_URL"
 )
 
 var DefaultScopes = []string{"openid", "offline_access", "profile", "email"}
@@ -40,6 +42,7 @@ type Source string
 const (
 	SourceUnset        Source = "unset"
 	SourceRuntime      Source = "runtime"
+	SourceDiscovery    Source = "discovery"
 	SourceConfig       Source = "config"
 	SourceDefault      Source = "default"
 	SourceSessionCache Source = "session_cache"
@@ -49,6 +52,7 @@ const (
 
 type FileConfig struct {
 	Version          int      `yaml:"version,omitempty"`
+	BaseURL          string   `yaml:"base_url,omitempty"`
 	IssuerURL        string   `yaml:"issuer_url,omitempty"`
 	ClientID         string   `yaml:"client_id,omitempty"`
 	Scopes           []string `yaml:"scopes,omitempty"`
@@ -62,6 +66,7 @@ type FileConfig struct {
 
 type Resolved struct {
 	APIKey           string
+	BaseURL          string
 	IssuerURL        string
 	ClientID         string
 	Scopes           []string
@@ -77,6 +82,7 @@ type Resolved struct {
 
 type Sources struct {
 	APIKey           Source
+	BaseURL          Source
 	IssuerURL        Source
 	ClientID         Source
 	Scopes           Source
@@ -122,6 +128,10 @@ func Resolve(cmd *cli.Command) (Resolved, error) {
 	}
 
 	apiKey, apiKeySource := resolveAPIKey(root)
+	baseURL, baseURLSource, err := resolveBaseURL(root, config.BaseURL)
+	if err != nil {
+		return Resolved{}, err
+	}
 	issuerURL, issuerSource := resolveString(root, config.IssuerURL, "auth-issuer-url")
 	if issuerURL == "" {
 		issuerURL = DefaultIssuerURL
@@ -147,6 +157,7 @@ func Resolve(cmd *cli.Command) (Resolved, error) {
 
 	return Resolved{
 		APIKey:           apiKey,
+		BaseURL:          baseURL,
 		IssuerURL:        issuerURL,
 		ClientID:         clientID,
 		Scopes:           scopes,
@@ -159,6 +170,7 @@ func Resolve(cmd *cli.Command) (Resolved, error) {
 		ListenPort:       listenPort,
 		Sources: Sources{
 			APIKey:           apiKeySource,
+			BaseURL:          baseURLSource,
 			IssuerURL:        issuerSource,
 			ClientID:         clientIDSource,
 			Scopes:           scopesSource,
@@ -174,27 +186,35 @@ func Resolve(cmd *cli.Command) (Resolved, error) {
 }
 
 func SaveProfile(resolved Resolved) error {
-	config := FileConfig{
-		Version:          ConfigVersion,
-		IssuerURL:        strings.TrimSpace(resolved.IssuerURL),
-		ClientID:         strings.TrimSpace(resolved.ClientID),
-		Scopes:           normalizeScopes(resolved.Scopes),
-		Audience:         strings.TrimSpace(resolved.Audience),
-		AuthorizationURL: strings.TrimSpace(resolved.AuthorizationURL),
-		TokenURL:         strings.TrimSpace(resolved.TokenURL),
-		UserInfoURL:      strings.TrimSpace(resolved.UserInfoURL),
-		RevocationURL:    strings.TrimSpace(resolved.RevocationURL),
-		SelectedOrg:      strings.TrimSpace(resolved.SelectedOrg),
-	}
-	return save(config)
+	return update(func(config *FileConfig) {
+		// Successful login promotes the complete resolved deployment profile.
+		config.BaseURL = strings.TrimSpace(resolved.BaseURL)
+		config.IssuerURL = strings.TrimSpace(resolved.IssuerURL)
+		config.ClientID = strings.TrimSpace(resolved.ClientID)
+		config.Scopes = normalizeScopes(resolved.Scopes)
+		config.Audience = strings.TrimSpace(resolved.Audience)
+		config.AuthorizationURL = strings.TrimSpace(resolved.AuthorizationURL)
+		config.TokenURL = strings.TrimSpace(resolved.TokenURL)
+		config.UserInfoURL = strings.TrimSpace(resolved.UserInfoURL)
+		config.RevocationURL = strings.TrimSpace(resolved.RevocationURL)
+		config.SelectedOrg = strings.TrimSpace(resolved.SelectedOrg)
+	})
 }
 
 func SaveSelectedOrg(org string) error {
+	return update(func(config *FileConfig) {
+		config.SelectedOrg = strings.TrimSpace(org)
+	})
+}
+
+// update applies mutate to the stored config, preserving every field the
+// caller does not own.
+func update(mutate func(*FileConfig)) error {
 	config, err := Load()
 	if err != nil {
 		return err
 	}
-	config.SelectedOrg = strings.TrimSpace(org)
+	mutate(&config)
 	return save(config)
 }
 
@@ -222,6 +242,48 @@ func resolveAPIKey(root *cli.Command) (string, Source) {
 		return value, SourceRuntime
 	}
 	return "", SourceUnset
+}
+
+// ResolveBaseURL resolves only the effective API base URL (flag, env, stored
+// config) for callers that don't need the full auth profile. A nil cmd skips
+// the flag source.
+func ResolveBaseURL(cmd *cli.Command) (string, Source, error) {
+	var root *cli.Command
+	if cmd != nil {
+		root = cmd.Root()
+		if root == nil {
+			root = cmd
+		}
+	}
+	config, err := Load()
+	if err != nil {
+		return "", SourceUnset, err
+	}
+	return resolveBaseURL(root, config.BaseURL)
+}
+
+func resolveBaseURL(root *cli.Command, fallback string) (string, Source, error) {
+	if root != nil && root.IsSet("base-url") {
+		value := strings.TrimSpace(root.String("base-url"))
+		if value != "" {
+			return value, SourceRuntime, ValidateBaseURL(value, "--base-url")
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv(EnvBaseURL)); value != "" {
+		return value, SourceRuntime, ValidateBaseURL(value, EnvBaseURL)
+	}
+	if value := strings.TrimSpace(fallback); value != "" {
+		return value, SourceConfig, ValidateBaseURL(value, "config base_url")
+	}
+	return "", SourceDefault, nil
+}
+
+// ValidateBaseURL preserves the CLI's existing base-URL validation behavior.
+func ValidateBaseURL(value, source string) error {
+	if value != "" && !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
+		return fmt.Errorf("%s %q is missing a scheme (expected http:// or https://)", source, value)
+	}
+	return nil
 }
 
 func resolveString(root *cli.Command, fallback string, name string) (string, Source) {

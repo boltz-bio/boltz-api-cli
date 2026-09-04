@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
 	"github.com/boltz-bio/boltz-api-cli/internal/authstore"
 	boltzapi "github.com/boltz-bio/boltz-api-go"
 	"github.com/boltz-bio/boltz-api-go/option"
@@ -92,18 +93,11 @@ func isTruthyEnv(value string) bool {
 }
 
 func hasCustomBaseURL(cmd *cli.Command) bool {
-	if strings.TrimSpace(os.Getenv("BOLTZ_BASE_URL")) != "" {
+	_, source, err := authconfig.ResolveBaseURL(cmd)
+	if err != nil {
 		return true
 	}
-
-	if cmd == nil {
-		return false
-	}
-	root := cmd.Root()
-	if root == nil {
-		root = cmd
-	}
-	return root.IsSet("base-url") || strings.TrimSpace(root.String("base-url")) != ""
+	return source != authconfig.SourceDefault
 }
 
 func runUpdateCheck(ctx context.Context) error {

@@ -36,79 +36,177 @@ func TestAuthStatusSubprocessReturnsJSONAndExitOneWhenUnauthenticated(t *testing
 	require.Equal(t, "none", response["effective_mode"])
 }
 
-func TestAuthLoginSubprocessCreatesSession(t *testing.T) {
+func TestAuthLoginSubprocessPersistsDiscoveredBaseURLAndRoutesLaterRequest(t *testing.T) {
 	binary := buildCLIBinary(t)
-	env := authProcessEnv(t)
+	t.Setenv(authconfig.EnvBaseURL, "")
+	t.Setenv(authconfig.EnvAuthIssuerURL, "")
+	t.Setenv("BOLTZ_API_KEY", "")
+	env := withoutEnvironment(authProcessEnv(t), authconfig.EnvBaseURL, authconfig.EnvAuthIssuerURL, "BOLTZ_API_KEY")
 	env = installFakeBrowserOpener(t, env)
+
+	type observedRequest struct {
+		path          string
+		authorization string
+	}
+	var requestMu sync.Mutex
+	var requests []observedRequest
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMu.Lock()
+		requests = append(requests, observedRequest{
+			path:          r.URL.Path,
+			authorization: r.Header.Get("Authorization"),
+		})
+		requestMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"latest":"0.39.0","minimum_supported":"0.8.0","update_available":false}`))
+	}))
+	defer apiServer.Close()
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-tenant-api.example.com",
+		IssuerURL: "https://old-tenant-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+
 	provider := newSubprocessOIDCProvider(t)
 	defer provider.Close()
+	provider.SetComputeAPIBaseURL(apiServer.URL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, binary,
-		"auth", "login",
+	login := runAuthLoginSubprocess(t, binary, env,
 		"--auth-issuer-url", provider.IssuerURL(),
 		"--auth-client-id", "client-123",
 		"--auth-scope", "openid",
 		"--auth-scope", "email",
 		"--listen-port", "0",
+		"auth", "login",
 	)
-	cmd.Env = env
-	cmd.Dir = repoRoot(t)
-
-	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, login.Err, login.Stderr)
+	require.Contains(t, login.Stdout, "Authentication successful.")
+	config, err := authconfig.Load()
 	require.NoError(t, err)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	require.NoError(t, cmd.Start())
-
-	linesCh := make(chan []string, 1)
-	urlCh := make(chan string, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		lines := make([]string, 0, 8)
-		expectURL := false
-		for scanner.Scan() {
-			line := scanner.Text()
-			lines = append(lines, line)
-			if expectURL && strings.HasPrefix(line, "http") {
-				urlCh <- line
-				expectURL = false
-				continue
-			}
-			if strings.Contains(line, "Open this URL to authenticate:") {
-				expectURL = true
-			}
-		}
-		linesCh <- lines
-	}()
-
-	var authURL string
-	select {
-	case authURL = <-urlCh:
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for auth URL")
-	}
-
-	resp, err := http.Get(authURL)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	_ = resp.Body.Close()
-
-	require.NoError(t, cmd.Wait(), stderr.String())
-	lines := <-linesCh
-	require.Contains(t, strings.Join(lines, "\n"), "Authentication successful.")
-
+	require.Equal(t, apiServer.URL, config.BaseURL)
+	require.Equal(t, provider.IssuerURL(), config.IssuerURL)
 	status := runCLI(t, binary, env, "--format", "json", "auth", "status")
-	require.Equal(t, 0, status.ExitCode, status.Stderr)
+	require.Equal(t, 0, status.ExitCode, "stdout:\n%s\nstderr:\n%s", status.Stdout, status.Stderr)
 
 	var response map[string]any
 	require.NoError(t, json.Unmarshal([]byte(status.Stdout), &response))
 	require.Equal(t, true, response["authenticated"])
 	require.Equal(t, "oauth", response["effective_mode"])
 	require.Equal(t, []any{"openid", "email"}, response["granted_scopes"])
+
+	requestMu.Lock()
+	requests = nil
+	requestMu.Unlock()
+
+	version := runCLI(t, binary, env, "--format", "json", "cli", "version")
+	require.Equal(t, 0, version.ExitCode, version.Stderr)
+
+	requestMu.Lock()
+	require.Len(t, requests, 1)
+	require.Equal(t, "/compute/v1/cli/version", requests[0].path)
+	require.Equal(t, "Bearer login-access", requests[0].authorization)
+	requestMu.Unlock()
+}
+
+func TestAuthLoginSubprocessOAuthFailurePreservesConfigBytes(t *testing.T) {
+	binary := buildCLIBinary(t)
+	t.Setenv(authconfig.EnvBaseURL, "")
+	t.Setenv(authconfig.EnvAuthIssuerURL, "")
+	env := installFakeBrowserOpener(t, withoutEnvironment(authProcessEnv(t), authconfig.EnvBaseURL, authconfig.EnvAuthIssuerURL))
+
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+	configPath, err := authstore.ConfigFilePath()
+	require.NoError(t, err)
+	before, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	previousSession := authstore.Session{
+		IssuerURL:   "https://old-issuer.example.com",
+		ClientID:    "old-client",
+		Scopes:      []string{"openid"},
+		AccessToken: "old-access",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(time.Hour),
+		TokenURL:    "https://old-issuer.example.com/token",
+	}
+	require.NoError(t, authstore.SaveSession(previousSession))
+	_, err = authstore.SaveRefreshToken("old-refresh")
+	require.NoError(t, err)
+
+	provider := newSubprocessOIDCProviderWithTokenStatus(t, http.StatusBadRequest)
+	defer provider.Close()
+
+	login := runAuthLoginSubprocess(t, binary, env,
+		"--base-url", "https://new-api.example.com",
+		"--auth-issuer-url", provider.IssuerURL(),
+		"--auth-client-id", "client-123",
+		"--auth-scope", "openid",
+		"--listen-port", "0",
+		"auth", "login",
+	)
+	require.Error(t, login.Err)
+
+	after, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	currentSession, err := authstore.LoadSession()
+	require.NoError(t, err)
+	require.NotNil(t, currentSession)
+	require.Equal(t, previousSession.AccessToken, currentSession.AccessToken)
+	currentToken, _, err := authstore.LoadRefreshToken()
+	require.NoError(t, err)
+	require.Equal(t, "old-refresh", currentToken)
+}
+
+func TestAuthLoginSubprocessWithoutBaseOverridePreservesStoredBaseURL(t *testing.T) {
+	binary := buildCLIBinary(t)
+	t.Setenv(authconfig.EnvBaseURL, "")
+	t.Setenv(authconfig.EnvAuthIssuerURL, "")
+	env := installFakeBrowserOpener(t, withoutEnvironment(authProcessEnv(t), authconfig.EnvBaseURL, authconfig.EnvAuthIssuerURL))
+
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://stored-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+	provider := newSubprocessOIDCProvider(t)
+	defer provider.Close()
+
+	login := runAuthLoginSubprocess(t, binary, env,
+		"--auth-issuer-url", provider.IssuerURL(),
+		"--auth-client-id", "client-123",
+		"--auth-scope", "openid",
+		"--listen-port", "0",
+		"auth", "login",
+	)
+	require.NoError(t, login.Err, login.Stderr)
+
+	config, err := authconfig.Load()
+	require.NoError(t, err)
+	require.Equal(t, "https://stored-api.example.com", config.BaseURL)
+	require.Equal(t, provider.IssuerURL(), config.IssuerURL)
+}
+
+func TestAuthLoginSubprocessInvalidBaseURLFailsBeforeOAuth(t *testing.T) {
+	binary := buildCLIBinary(t)
+	env := authProcessEnv(t)
+	provider := newSubprocessOIDCProvider(t)
+	defer provider.Close()
+
+	result := runCLI(t, binary, env,
+		"--base-url", "api.customer.example.com",
+		"--auth-issuer-url", provider.IssuerURL(),
+		"auth", "login",
+	)
+	require.NotEqual(t, 0, result.ExitCode)
+	require.Contains(t, result.Stderr, "missing a scheme")
+	require.Equal(t, 0, provider.DiscoveryRequests())
 }
 
 func TestAuthValidateSubprocessClearsInvalidGrantState(t *testing.T) {
@@ -163,6 +261,69 @@ type cliResult struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
+}
+
+type authLoginResult struct {
+	Stdout string
+	Stderr string
+	Err    error
+}
+
+func runAuthLoginSubprocess(t *testing.T, binary string, env []string, args ...string) authLoginResult {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Env = env
+	cmd.Dir = repoRoot(t)
+
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Start())
+
+	linesCh := make(chan []string, 1)
+	urlCh := make(chan string, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		lines := make([]string, 0, 8)
+		expectURL := false
+		for scanner.Scan() {
+			line := scanner.Text()
+			lines = append(lines, line)
+			if expectURL && strings.HasPrefix(line, "http") {
+				urlCh <- line
+				expectURL = false
+				continue
+			}
+			if strings.Contains(line, "Open this URL to authenticate:") {
+				expectURL = true
+			}
+		}
+		linesCh <- lines
+	}()
+
+	var authURL string
+	select {
+	case authURL = <-urlCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for auth URL")
+	}
+
+	response, err := http.Get(authURL)
+	require.NoError(t, err)
+	_ = response.Body.Close()
+
+	waitErr := cmd.Wait()
+	lines := <-linesCh
+	return authLoginResult{
+		Stdout: strings.Join(lines, "\n"),
+		Stderr: stderr.String(),
+		Err:    waitErr,
+	}
 }
 
 func runCLI(t *testing.T, binary string, env []string, args ...string) cliResult {
@@ -247,6 +408,24 @@ func authProcessEnv(t *testing.T) []string {
 	return env
 }
 
+func withoutEnvironment(env []string, names ...string) []string {
+	blocked := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		blocked[name] = struct{}{}
+	}
+	result := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, found := strings.Cut(entry, "=")
+		if found {
+			if _, remove := blocked[name]; remove {
+				continue
+			}
+		}
+		result = append(result, entry)
+	}
+	return result
+}
+
 func installFakeBrowserOpener(t *testing.T, env []string) []string {
 	t.Helper()
 
@@ -309,22 +488,37 @@ func (m subprocessTestKeyringBackend) Delete(service, key string) error {
 type subprocessOIDCProvider struct {
 	server *httptest.Server
 
-	mu sync.Mutex
+	mu                sync.Mutex
+	discoveryRequests int
+	tokenStatus       int
+	computeAPIBaseURL string
 }
 
 func newSubprocessOIDCProvider(t *testing.T) *subprocessOIDCProvider {
+	return newSubprocessOIDCProviderWithTokenStatus(t, http.StatusOK)
+}
+
+func newSubprocessOIDCProviderWithTokenStatus(t *testing.T, tokenStatus int) *subprocessOIDCProvider {
 	t.Helper()
 
-	provider := &subprocessOIDCProvider{}
+	provider := &subprocessOIDCProvider{tokenStatus: tokenStatus}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		provider.mu.Lock()
+		provider.discoveryRequests++
+		computeAPIBaseURL := provider.computeAPIBaseURL
+		provider.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		document := map[string]any{
 			"issuer":                 provider.server.URL,
 			"authorization_endpoint": provider.server.URL + "/authorize",
 			"token_endpoint":         provider.server.URL + "/token",
 			"userinfo_endpoint":      provider.server.URL + "/userinfo",
-		})
+		}
+		if computeAPIBaseURL != "" {
+			document["boltz_compute_api_base_url"] = computeAPIBaseURL
+		}
+		_ = json.NewEncoder(w).Encode(document)
 	})
 	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		callback, err := url.Parse(r.URL.Query().Get("redirect_uri"))
@@ -343,6 +537,11 @@ func newSubprocessOIDCProvider(t *testing.T) *subprocessOIDCProvider {
 		require.NotEmpty(t, r.PostForm.Get("redirect_uri"))
 		require.NotEmpty(t, r.PostForm.Get("code_verifier"))
 		w.Header().Set("Content-Type", "application/json")
+		if provider.tokenStatus != http.StatusOK {
+			w.WriteHeader(provider.tokenStatus)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"rejected test login"}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"access_token":"login-access","refresh_token":"login-refresh","token_type":"Bearer","expires_in":3600}`))
 	})
 	mux.HandleFunc("/userinfo", func(w http.ResponseWriter, r *http.Request) {
@@ -361,4 +560,16 @@ func (p *subprocessOIDCProvider) Close() {
 
 func (p *subprocessOIDCProvider) IssuerURL() string {
 	return p.server.URL
+}
+
+func (p *subprocessOIDCProvider) SetComputeAPIBaseURL(baseURL string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.computeAPIBaseURL = baseURL
+}
+
+func (p *subprocessOIDCProvider) DiscoveryRequests() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.discoveryRequests
 }

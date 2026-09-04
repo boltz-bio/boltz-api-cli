@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
+	"github.com/boltz-bio/boltz-api-cli/internal/autherror"
 	"github.com/boltz-bio/boltz-api-cli/internal/authstore"
+	"github.com/boltz-bio/boltz-api-cli/internal/oauthclient"
 	"github.com/boltz-bio/boltz-api-cli/internal/requestflag"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v3"
@@ -420,6 +422,302 @@ func TestAuthLoginDoesNotPersistProfileOnFailure(t *testing.T) {
 	require.Empty(t, config.ClientID)
 }
 
+func TestSelectLoginBaseURLPrecedence(t *testing.T) {
+	tests := []struct {
+		name       string
+		resolved   authconfig.Resolved
+		discovered string
+		expected   string
+		source     authconfig.Source
+	}{
+		{
+			name:       "runtime override beats discovery",
+			resolved:   authconfig.Resolved{BaseURL: "https://runtime-api.example.com", Sources: authconfig.Sources{BaseURL: authconfig.SourceRuntime}},
+			discovered: "https://discovered-api.example.com",
+			expected:   "https://runtime-api.example.com",
+			source:     authconfig.SourceRuntime,
+		},
+		{
+			name:       "discovery replaces stored",
+			resolved:   authconfig.Resolved{BaseURL: "https://stored-api.example.com", Sources: authconfig.Sources{BaseURL: authconfig.SourceConfig}},
+			discovered: "https://discovered-api.example.com:8443",
+			expected:   "https://discovered-api.example.com:8443",
+			source:     authconfig.SourceDiscovery,
+		},
+		{
+			name:       "discovery replaces default",
+			resolved:   authconfig.Resolved{Sources: authconfig.Sources{BaseURL: authconfig.SourceDefault}},
+			discovered: "http://localhost:8080",
+			expected:   "http://localhost:8080",
+			source:     authconfig.SourceDiscovery,
+		},
+		{
+			name:     "missing discovery preserves stored",
+			resolved: authconfig.Resolved{BaseURL: "https://stored-api.example.com", Sources: authconfig.Sources{BaseURL: authconfig.SourceConfig}},
+			expected: "https://stored-api.example.com",
+			source:   authconfig.SourceConfig,
+		},
+		{
+			name:     "missing discovery preserves SDK default",
+			resolved: authconfig.Resolved{Sources: authconfig.Sources{BaseURL: authconfig.SourceDefault}},
+			source:   authconfig.SourceDefault,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			selected, err := selectLoginBaseURL(test.resolved, test.discovered)
+			require.NoError(t, err)
+			require.Equal(t, test.expected, selected.BaseURL)
+			require.Equal(t, test.source, selected.Sources.BaseURL)
+		})
+	}
+}
+
+func TestSelectLoginBaseURLIgnoresInvalidDiscoveryBehindRuntimeOverride(t *testing.T) {
+	resolved := authconfig.Resolved{
+		BaseURL: "https://override-api.example.com",
+		Sources: authconfig.Sources{BaseURL: authconfig.SourceRuntime},
+	}
+
+	selected, err := selectLoginBaseURL(resolved, "invalid-discovered-api.example.com")
+	require.NoError(t, err)
+	require.Equal(t, resolved, selected)
+}
+
+func TestSelectLoginBaseURLRejectsInvalidSelectedDiscovery(t *testing.T) {
+	_, err := selectLoginBaseURL(authconfig.Resolved{
+		BaseURL: "https://stored-api.example.com",
+		Sources: authconfig.Sources{BaseURL: authconfig.SourceConfig},
+	}, "invalid-discovered-api.example.com")
+
+	var authErr *autherror.Error
+	require.ErrorAs(t, err, &authErr)
+	require.Equal(t, "invalid_discovered_base_url", authErr.Envelope().Code)
+	require.Contains(t, authErr.Error(), "OIDC discovery boltz_compute_api_base_url")
+	require.Contains(t, authErr.Error(), "missing a scheme")
+}
+
+func TestAuthLoginPersistsDiscoveredBaseURLWhenSwitchingTenant(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	useFileOnlyKeyringForAuthCommandTests(t)
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "client-123",
+		Scopes:    []string{"openid"},
+	}))
+
+	stubBrowserLogin(t, successfulLoginResult(
+		"https://new-issuer.example.com",
+		"https://new-api.example.com:8443",
+	))
+
+	_, err := runAuthCommand(t,
+		"--auth-issuer-url", "https://new-issuer.example.com",
+		"--auth-client-id", "client-123",
+		"--auth-scope", "openid",
+		"auth", "login",
+	)
+	require.NoError(t, err)
+
+	config, err := authconfig.Load()
+	require.NoError(t, err)
+	require.Equal(t, "https://new-issuer.example.com", config.IssuerURL)
+	require.Equal(t, "https://new-api.example.com:8443", config.BaseURL)
+}
+
+func TestAuthDeviceLoginPersistsDiscoveredBaseURL(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	useFileOnlyKeyringForAuthCommandTests(t)
+
+	stubDeviceLogin(t, successfulLoginResult(
+		"https://device-issuer.example.com",
+		"https://device-api.example.com",
+	))
+
+	_, err := runAuthCommand(t,
+		"--auth-issuer-url", "https://device-issuer.example.com",
+		"--auth-client-id", "client-123",
+		"auth", "login", "--device-code",
+	)
+	require.NoError(t, err)
+
+	config, err := authconfig.Load()
+	require.NoError(t, err)
+	require.Equal(t, "https://device-issuer.example.com", config.IssuerURL)
+	require.Equal(t, "https://device-api.example.com", config.BaseURL)
+}
+
+func TestAuthLoginRuntimeBaseURLOverridesDiscovery(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "flag",
+			args:     []string{"--base-url", "https://flag-api.example.com"},
+			expected: "https://flag-api.example.com",
+		},
+		{
+			name:     "environment",
+			env:      "https://env-api.example.com",
+			expected: "https://env-api.example.com",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			setAuthCommandUserDirs(t)
+			useFileOnlyKeyringForAuthCommandTests(t)
+			if test.env != "" {
+				t.Setenv(authconfig.EnvBaseURL, test.env)
+			}
+
+			stubBrowserLogin(t, successfulLoginResult(
+				"https://issuer.example.com",
+				"invalid-discovered-api.example.com",
+			))
+
+			args := append([]string(nil), test.args...)
+			args = append(args,
+				"--auth-issuer-url", "https://issuer.example.com",
+				"--auth-client-id", "client-123",
+				"auth", "login",
+			)
+			_, err := runAuthCommand(t, args...)
+			require.NoError(t, err)
+
+			config, err := authconfig.Load()
+			require.NoError(t, err)
+			require.Equal(t, test.expected, config.BaseURL)
+		})
+	}
+}
+
+func TestAuthLoginInvalidDiscoveredBaseURLPreservesPriorState(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	useFileOnlyKeyringForAuthCommandTests(t)
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+	previousSession := authstore.Session{
+		IssuerURL:   "https://old-issuer.example.com",
+		ClientID:    "old-client",
+		AccessToken: "old-access",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(time.Hour),
+	}
+	require.NoError(t, authstore.SaveSession(previousSession))
+	_, err := authstore.SaveRefreshToken("old-refresh")
+	require.NoError(t, err)
+
+	configPath, err := authstore.ConfigFilePath()
+	require.NoError(t, err)
+	sessionPath, err := authstore.SessionFilePath()
+	require.NoError(t, err)
+	credentialsPath, err := authstore.CredentialsFilePath()
+	require.NoError(t, err)
+	configBefore, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	sessionBefore, err := os.ReadFile(sessionPath)
+	require.NoError(t, err)
+	credentialsBefore, err := os.ReadFile(credentialsPath)
+	require.NoError(t, err)
+
+	stubBrowserLogin(t, successfulLoginResult(
+		"https://new-issuer.example.com",
+		"invalid-discovered-api.example.com",
+	))
+
+	_, err = runAuthCommand(t,
+		"--auth-issuer-url", "https://new-issuer.example.com",
+		"--auth-client-id", "new-client",
+		"auth", "login",
+	)
+	var authErr *autherror.Error
+	require.ErrorAs(t, err, &authErr)
+	require.Equal(t, "invalid_discovered_base_url", authErr.Envelope().Code)
+
+	configAfter, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	sessionAfter, err := os.ReadFile(sessionPath)
+	require.NoError(t, err)
+	credentialsAfter, err := os.ReadFile(credentialsPath)
+	require.NoError(t, err)
+	require.Equal(t, configBefore, configAfter)
+	require.Equal(t, sessionBefore, sessionAfter)
+	require.Equal(t, credentialsBefore, credentialsAfter)
+}
+
+func TestAuthLoginConfigPersistenceFailureRollsBackSessionAndToken(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	useFileOnlyKeyringForAuthCommandTests(t)
+
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://old-api.example.com",
+		IssuerURL: "https://old-issuer.example.com",
+		ClientID:  "old-client",
+		Scopes:    []string{"openid"},
+	}))
+	configPath, err := authstore.ConfigFilePath()
+	require.NoError(t, err)
+	configBefore, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	previousSession := authstore.Session{
+		IssuerURL:   "https://old-issuer.example.com",
+		ClientID:    "old-client",
+		Scopes:      []string{"openid"},
+		AccessToken: "old-access",
+		TokenType:   "Bearer",
+		Expiry:      time.Now().Add(time.Hour),
+		TokenURL:    "https://old-issuer.example.com/token",
+	}
+	require.NoError(t, authstore.SaveSession(previousSession))
+	_, err = authstore.SaveRefreshToken("old-refresh")
+	require.NoError(t, err)
+
+	previousSaveProfile := authSaveProfile
+	t.Cleanup(func() { authSaveProfile = previousSaveProfile })
+	stubBrowserLogin(t, successfulLoginResult("https://new-issuer.example.com", ""))
+	var attemptedProfile authconfig.Resolved
+	authSaveProfile = func(resolved authconfig.Resolved) error {
+		attemptedProfile = resolved
+		return errors.New("forced config persistence failure")
+	}
+
+	_, err = runAuthCommand(t,
+		"--base-url", "https://new-api.example.com",
+		"--auth-issuer-url", "https://new-issuer.example.com",
+		"--auth-client-id", "new-client",
+		"--auth-scope", "openid",
+		"auth", "login",
+	)
+	var authErr *autherror.Error
+	require.ErrorAs(t, err, &authErr)
+	require.Equal(t, "config_save_failed", authErr.Envelope().Code)
+	require.Equal(t, "https://new-api.example.com", attemptedProfile.BaseURL)
+
+	configAfter, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	require.Equal(t, configBefore, configAfter)
+	restoredSession, err := authstore.LoadSession()
+	require.NoError(t, err)
+	require.NotNil(t, restoredSession)
+	require.Equal(t, previousSession.AccessToken, restoredSession.AccessToken)
+	require.Equal(t, previousSession.IssuerURL, restoredSession.IssuerURL)
+	require.Equal(t, previousSession.ClientID, restoredSession.ClientID)
+	restoredToken, _, err := authstore.LoadRefreshToken()
+	require.NoError(t, err)
+	require.Equal(t, "old-refresh", restoredToken)
+}
+
 func TestAuthLoginJSONEventsRequiresDeviceCode(t *testing.T) {
 	setAuthCommandUserDirs(t)
 	useFileOnlyKeyringForAuthCommandTests(t)
@@ -475,6 +773,42 @@ func TestAuthWaitReturnsWaitingStatusOnTimeout(t *testing.T) {
 	require.Equal(t, "waiting", response["status"])
 	require.Equal(t, true, response["timed_out"])
 	require.Equal(t, false, response["authenticated"])
+}
+
+func successfulLoginResult(issuerURL, baseURL string) *oauthclient.LoginResult {
+	return &oauthclient.LoginResult{
+		Provider: oauthclient.ProviderMetadata{
+			IssuerURL:         issuerURL,
+			ComputeAPIBaseURL: baseURL,
+			TokenURL:          issuerURL + "/token",
+		},
+		Tokens: oauthclient.TokenSet{
+			AccessToken:  "access-token",
+			RefreshToken: "refresh-token",
+			TokenType:    "Bearer",
+			Expiry:       time.Now().Add(time.Hour),
+		},
+	}
+}
+
+func stubBrowserLogin(t *testing.T, result *oauthclient.LoginResult) {
+	t.Helper()
+
+	previous := authBrowserLogin
+	authBrowserLogin = func(context.Context, oauthclient.Config) (*oauthclient.LoginResult, error) {
+		return result, nil
+	}
+	t.Cleanup(func() { authBrowserLogin = previous })
+}
+
+func stubDeviceLogin(t *testing.T, result *oauthclient.LoginResult) {
+	t.Helper()
+
+	previous := authDeviceLogin
+	authDeviceLogin = func(context.Context, oauthclient.Config) (*oauthclient.LoginResult, error) {
+		return result, nil
+	}
+	t.Cleanup(func() { authDeviceLogin = previous })
 }
 
 func runAuthCommand(t *testing.T, args ...string) (string, error) {

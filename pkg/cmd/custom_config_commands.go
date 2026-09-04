@@ -41,6 +41,7 @@ type configShowResponse struct {
 
 type configFileResponse struct {
 	Version          int      `json:"version,omitempty"`
+	BaseURL          string   `json:"base_url,omitempty"`
 	IssuerURL        string   `json:"issuer_url,omitempty"`
 	ClientID         string   `json:"client_id,omitempty"`
 	Scopes           []string `json:"scopes,omitempty"`
@@ -80,6 +81,7 @@ func handleConfigShow(ctx context.Context, cmd *cli.Command) error {
 	if present {
 		response.Config = &configFileResponse{
 			Version:          config.Version,
+			BaseURL:          config.BaseURL,
 			IssuerURL:        config.IssuerURL,
 			ClientID:         config.ClientID,
 			Scopes:           append([]string(nil), config.Scopes...),

@@ -116,6 +116,7 @@ boltz-api predictions:structure-and-binding start --help
 | Environment variable | Required | Default value |
 | -------------------- | -------- | ------------- |
 | `BOLTZ_API_KEY`      | no       | `null`        |
+| `BOLTZ_BASE_URL`     | no       | stored `base_url`, then the default Boltz API endpoint |
 | `BOLTZ_API_NO_UPDATE_CHECK` | no | `0` |
 
 When run interactively, the CLI checks once per day whether a newer release is
@@ -143,7 +144,7 @@ configured with:
 - `--help` - Show command line usage
 - `--debug` - Enable debug logging (includes HTTP request/response details)
 - `--version`, `-v` - Show the CLI version
-- `--base-url` - Use a custom API backend URL
+- `--base-url` - Use a custom API backend URL for this invocation (overrides `BOLTZ_BASE_URL` and stored configuration)
 - `--format` - Change the output format (`auto`, `explore`, `json`, `jsonl`, `pretty`, `raw`, `yaml`)
 - `--format-error` - Change the output format for errors (`auto`, `explore`, `json`, `jsonl`, `pretty`, `raw`, `yaml`)
 - `--transform` - Transform the data output using [GJSON syntax](https://github.com/tidwall/gjson/blob/master/SYNTAX.md). On paginated or streamed list commands, the transform runs on each item unless you use `--format raw`.
@@ -227,6 +228,33 @@ using the stored refresh token; `auth wait` stays read-only and polls local auth
 state until usable auth appears or the timeout expires. In API-key mode,
 `auth validate` confirms that an API key is configured locally; it does not
 make a server round-trip.
+
+For tenant setup, provide the issuer once. If its OIDC discovery document
+includes `boltz_compute_api_base_url`, a successful login validates and stores
+that API endpoint alongside the issuer and OAuth profile:
+
+```sh
+boltz-api --auth-issuer-url "https://lab.customer.example.com" \
+  auth login
+```
+
+The discovery field is optional, so issuers that omit it preserve the existing
+stored endpoint or the SDK default. During login, base-URL precedence is an
+explicit `--base-url` or non-empty `BOLTZ_BASE_URL`, then issuer discovery, then
+stored `base_url`, then the SDK default. For example, use the explicit flag as
+an escape hatch when an issuer advertises the wrong endpoint:
+
+```sh
+boltz-api --base-url "https://api.override.example.com" \
+  --auth-issuer-url "https://lab.customer.example.com" \
+  auth login
+```
+
+For ordinary commands, resolution remains `--base-url`, non-empty
+`BOLTZ_BASE_URL`, stored `base_url`, then the SDK default. Outside a successful
+`auth login`, the flag and environment variable are runtime-only and do not
+mutate the stored profile. API-key-only workflows therefore continue to supply
+the tenant endpoint at runtime.
 
 For machine callers that need to wait for a browser-based login to finish:
 

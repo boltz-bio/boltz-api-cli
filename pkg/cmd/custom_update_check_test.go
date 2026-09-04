@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
 	boltzapi "github.com/boltz-bio/boltz-api-go"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,15 @@ func TestShouldRunUpdateCheck(t *testing.T) {
 			require.Equal(t, test.expected, got)
 		})
 	}
+}
+
+func TestHasCustomBaseURLIncludesStoredConfig(t *testing.T) {
+	setAuthCommandUserDirs(t)
+	t.Setenv(authconfig.EnvBaseURL, "")
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{BaseURL: "https://api.customer.example.com"}))
+
+	cmd := parsedTestCommand(t, "call")
+	require.True(t, hasCustomBaseURL(cmd))
 }
 
 func TestRunUpdateCheckCachesSuccessfulCheck(t *testing.T) {

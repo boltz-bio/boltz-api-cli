@@ -18,6 +18,7 @@ func TestConfigShowAndReset(t *testing.T) {
 	setConfigCommandUserDirs(t)
 
 	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		BaseURL:   "https://api.customer.example.com",
 		IssuerURL: "https://issuer.example.com",
 		ClientID:  "client-123",
 		Scopes:    []string{"openid", "email"},
@@ -31,9 +32,13 @@ func TestConfigShowAndReset(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(output), &show))
 	require.Equal(t, true, show["present"])
 	require.NotEmpty(t, show["path"])
+	info, statErr := os.Stat(show["path"].(string))
+	require.NoError(t, statErr)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	config := show["config"].(map[string]any)
 	require.Equal(t, "https://issuer.example.com", config["issuer_url"])
 	require.Equal(t, "client-123", config["client_id"])
+	require.Equal(t, "https://api.customer.example.com", config["base_url"])
 
 	output, err = runConfigCommand(t, "--format", "json", "config", "reset")
 	require.NoError(t, err)
