@@ -21,7 +21,7 @@ var adminWorkspacesCreate = requestflag.WithInnerFlags(cli.Command{
 	Flags: []cli.Flag{
 		&requestflag.Flag[map[string]any]{
 			Name:     "data-retention",
-			Usage:    "How long result data is retained before automatic deletion. Defaults to 7 days if not specified. Maximum retention is 14 days (336 hours).",
+			Usage:    "How long result data is retained before automatic deletion. Uses the organization default if not specified (normally 7 days). The standard maximum is 14 days (336 hours); custom organization policies can extend it.",
 			BodyPath: "data_retention",
 		},
 		&requestflag.Flag[string]{
@@ -45,7 +45,7 @@ var adminWorkspacesCreate = requestflag.WithInnerFlags(cli.Command{
 		},
 		&requestflag.InnerFlag[int64]{
 			Name:       "data-retention.value",
-			Usage:      "Duration value. Maximum retention is 14 days (or 336 hours).",
+			Usage:      "Duration value. The standard maximum is 14 days (336 hours). Organizations can have a custom maximum.",
 			InnerField: "value",
 		},
 	},
@@ -89,7 +89,7 @@ var adminWorkspacesUpdate = requestflag.WithInnerFlags(cli.Command{
 		},
 		&requestflag.Flag[map[string]any]{
 			Name:     "data-retention",
-			Usage:    "How long result data is retained before automatic deletion. Defaults to 7 days if not specified. Maximum retention is 14 days (336 hours).",
+			Usage:    "How long result data is retained before automatic deletion. Uses the organization default if not specified (normally 7 days). The standard maximum is 14 days (336 hours); custom organization policies can extend it.",
 			BodyPath: "data_retention",
 		},
 		&requestflag.Flag[*string]{
@@ -108,7 +108,7 @@ var adminWorkspacesUpdate = requestflag.WithInnerFlags(cli.Command{
 		},
 		&requestflag.InnerFlag[int64]{
 			Name:       "data-retention.value",
-			Usage:      "Duration value. Maximum retention is 14 days (or 336 hours).",
+			Usage:      "Duration value. The standard maximum is 14 days (336 hours). Organizations can have a custom maximum.",
 			InnerField: "value",
 		},
 	},
