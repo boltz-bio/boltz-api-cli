@@ -321,7 +321,7 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	_, err = authstore.WithLock(ctx, func() (struct{}, error) {
+	_, err = authstore.WithLock(ctx, func(bool) (struct{}, error) {
 		previousSession, loadErr := authstore.LoadSession()
 		if loadErr != nil {
 			return struct{}{}, autherror.New("session_load_failed", "Failed to load the existing OAuth session", loadErr.Error())
@@ -483,7 +483,7 @@ func handleAuthLogout(ctx context.Context, cmd *cli.Command) error {
 		refreshToken string
 	}
 
-	snapshot, err := authstore.WithLock(ctx, func() (logoutSnapshot, error) {
+	snapshot, err := authstore.WithLock(ctx, func(bool) (logoutSnapshot, error) {
 		session, err := authstore.LoadSession()
 		if err != nil {
 			return logoutSnapshot{}, autherror.New("session_load_failed", "Failed to load OAuth session", err.Error())

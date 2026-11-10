@@ -77,7 +77,7 @@ func SessionMatches(resolved authconfig.Resolved, session authstore.Session) boo
 }
 
 func refreshSession(ctx context.Context, resolved authconfig.Resolved) (*authstore.Session, error) {
-	session, err := authstore.WithLock(ctx, func() (*authstore.Session, error) {
+	session, err := authstore.WithLock(ctx, func(lockHeld bool) (*authstore.Session, error) {
 		current, err := authstore.LoadSession()
 		if err != nil {
 			return nil, autherror.New("session_load_failed", "Failed to load OAuth session", err.Error())
@@ -123,10 +123,10 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved) (*authsto
 			return nil, autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
 		}
 		if strings.TrimSpace(refreshToken) == "" {
-			if clearErr := authstore.ClearAll(); clearErr != nil {
-				return nil, autherror.New("session_clear_failed", "Access token expired and the stored session could not be cleared", clearErr.Error())
-			}
-			return nil, autherror.New("reauth_required", "Stored OAuth session can no longer be refreshed", "Run `boltz-api auth login` again.")
+			// Don't clear the session: an empty token can mean the keyring is
+			// just unreachable from this process, and other processes may be
+			// using the session.
+			return nil, autherror.New("reauth_required", "Stored OAuth session can no longer be refreshed", "Could not load a refresh token (the system keyring may be unavailable). Run `boltz-api auth login` again.")
 		}
 
 		tokens, err := oauthclient.Refresh(ctx, oauthclient.RefreshConfig{
@@ -137,6 +137,11 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved) (*authsto
 		})
 		if err != nil {
 			if oauthclient.IsInvalidGrant(err) {
+				// Without the lock, the rejection may mean a peer just spent
+				// this token and is about to save its replacement.
+				if !lockHeld {
+					return nil, autherror.New("reauth_required", "Stored OAuth session is no longer valid", "Run `boltz-api auth login` again.")
+				}
 				if clearErr := authstore.ClearAll(); clearErr != nil {
 					return nil, autherror.New("session_clear_failed", "Stored OAuth session is invalid and could not be cleared", clearErr.Error())
 				}
