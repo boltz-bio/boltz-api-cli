@@ -21,42 +21,8 @@ func setTestDirs(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home)
 }
 
-func TestWithLockTimesOutAndNamesLockPath(t *testing.T) {
-	setTestDirs(t)
-	t.Setenv(LockTimeoutEnv, "200ms")
-
-	lockPath, err := LockFilePath()
-	require.NoError(t, err)
-
-	// Take the lock through WithLock so the holder is recorded, then hold it
-	// from a separate flock handle while a second WithLock waits.
-	_, err = WithLock(context.Background(), func() (struct{}, error) { return struct{}{}, nil })
-	require.NoError(t, err)
-	holder := flock.New(lockPath)
-	ok, err := holder.TryLock()
-	require.NoError(t, err)
-	require.True(t, ok)
-	defer holder.Close()
-
-	start := time.Now()
-	called := false
-	_, err = WithLock(context.Background(), func() (struct{}, error) {
-		called = true
-		return struct{}{}, nil
-	})
-	require.False(t, called)
-	require.Less(t, time.Since(start), 5*time.Second)
-
-	var lockErr *LockTimeoutError
-	require.True(t, errors.As(err, &lockErr), "got %v", err)
-	require.Equal(t, lockPath, lockErr.Path)
-	require.Contains(t, err.Error(), lockPath)
-	require.Contains(t, lockErr.Holder, "pid ")
-}
-
-func TestWithLockHonorsCallerCancellation(t *testing.T) {
-	setTestDirs(t)
-
+func holdLock(t *testing.T) *flock.Flock {
+	t.Helper()
 	lockPath, err := LockFilePath()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(lockPath), 0o700))
@@ -64,14 +30,42 @@ func TestWithLockHonorsCallerCancellation(t *testing.T) {
 	ok, err := holder.TryLock()
 	require.NoError(t, err)
 	require.True(t, ok)
-	defer holder.Close()
+	t.Cleanup(func() { _ = holder.Close() })
+	return holder
+}
+
+func TestWithLockReportsLockHeld(t *testing.T) {
+	setTestDirs(t)
+
+	held, err := WithLock(context.Background(), func(lockHeld bool) (bool, error) { return lockHeld, nil })
+	require.NoError(t, err)
+	require.True(t, held)
+}
+
+// A stuck holder must not wedge other processes: after the lock timeout the
+// caller proceeds without the lock and is told so.
+func TestWithLockProceedsWithoutLockAfterTimeout(t *testing.T) {
+	setTestDirs(t)
+	t.Setenv(testLockTimeoutEnv, "200ms")
+	holdLock(t)
+
+	start := time.Now()
+	held, err := WithLock(context.Background(), func(lockHeld bool) (bool, error) { return lockHeld, nil })
+	require.NoError(t, err)
+	require.False(t, held)
+	require.Less(t, time.Since(start), 5*time.Second)
+}
+
+func TestWithLockHonorsCallerCancellation(t *testing.T) {
+	setTestDirs(t)
+	holdLock(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, err = WithLock(ctx, func() (struct{}, error) { return struct{}{}, nil })
+	called := false
+	_, err := WithLock(ctx, func(bool) (struct{}, error) { called = true; return struct{}{}, nil })
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	var lockErr *LockTimeoutError
-	require.False(t, errors.As(err, &lockErr))
+	require.False(t, called)
 }
 
 // blockingKeyring simulates a Secret Service unlock prompt nobody answers.
@@ -88,29 +82,9 @@ func blockingKeyring(t *testing.T) {
 	t.Cleanup(ResetKeyring)
 }
 
-func TestHungKeyringIsBoundedAndFallsBackToFile(t *testing.T) {
-	setTestDirs(t)
-	t.Setenv(KeyringTimeoutEnv, "100ms")
-	blockingKeyring(t)
-
-	start := time.Now()
-	backend, err := SaveRefreshToken("refresh-token")
-	require.NoError(t, err)
-	require.Equal(t, "file", backend)
-
-	token, loaded, err := LoadRefreshTokenWithPreferredBackend("keyring")
-	require.NoError(t, err)
-	require.Equal(t, "refresh-token", token)
-	require.Equal(t, "file", loaded)
-	// One probe timeout; later calls skip the keyring entirely.
-	require.Less(t, time.Since(start), 2*time.Second)
-}
-
-func TestKeyringFailureIsReportedNotTreatedAsMissingToken(t *testing.T) {
-	setTestDirs(t)
-	t.Setenv(KeyringTimeoutEnv, "100ms")
-
-	// Probe succeeds, then the real read hangs.
+// probeOKThenBlock passes the availability probe, then hangs every real call.
+func probeOKThenBlock(t *testing.T) {
+	t.Helper()
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	SetKeyringBackend(mockKeyringBackend{
@@ -121,27 +95,85 @@ func TestKeyringFailureIsReportedNotTreatedAsMissingToken(t *testing.T) {
 			<-release
 			return "", nil
 		},
+		set:    func(string, string, string) error { <-release; return nil },
+		delete: func(string, string) error { <-release; return nil },
 	})
 	t.Cleanup(ResetKeyring)
+}
+
+// At login, a hung keyring falls back to the file (GitHub CLI's behavior)
+// after one timeout, without waiting again to delete the stale entry.
+func TestLoginSaveFallsBackToFileWhenKeyringHangs(t *testing.T) {
+	setTestDirs(t)
+	t.Setenv(testKeyringTimeoutEnv, "150ms")
+	probeOKThenBlock(t)
+
+	start := time.Now()
+	backend, err := SaveRefreshToken("refresh-token")
+	require.NoError(t, err)
+	require.Equal(t, "file", backend)
+	require.Less(t, time.Since(start), 290*time.Millisecond, "one keyring timeout, not two")
+
+	token, loaded, err := LoadRefreshTokenWithPreferredBackend("file")
+	require.NoError(t, err)
+	require.Equal(t, "refresh-token", token)
+	require.Equal(t, "file", loaded)
+}
+
+func TestHungProbeIsBounded(t *testing.T) {
+	setTestDirs(t)
+	t.Setenv(testKeyringTimeoutEnv, "100ms")
+	blockingKeyring(t)
+
+	start := time.Now()
+	_, _, err := LoadRefreshTokenWithPreferredBackend("keyring")
+	require.ErrorIs(t, err, ErrKeyringUnavailable)
+	require.Less(t, time.Since(start), 2*time.Second)
+}
+
+// A keyring failure is reported as such, never as "no token", and (like
+// GitHub CLI) the keyring is retried on the next call rather than written off.
+func TestKeyringTimeoutIsReportedAndRetried(t *testing.T) {
+	setTestDirs(t)
+	t.Setenv(testKeyringTimeoutEnv, "100ms")
+	probeOKThenBlock(t)
 
 	_, _, err := LoadRefreshTokenWithPreferredBackend("keyring")
 	require.ErrorIs(t, err, ErrKeyringTimeout)
-
-	// The process now treats the keyring as unavailable instead of hanging again.
 	_, _, err = LoadRefreshTokenWithPreferredBackend("keyring")
-	require.ErrorIs(t, err, ErrKeyringUnavailable)
+	require.ErrorIs(t, err, ErrKeyringTimeout)
 }
 
-func TestDisableKeyringEnv(t *testing.T) {
+// A rotated token goes back to the backend it came from; a keyring failure is
+// an error rather than a silent move to plain text.
+func TestPersistRefreshTokenKeepsBackend(t *testing.T) {
 	setTestDirs(t)
-	t.Setenv(DisableKeyringEnv, "1")
+	t.Setenv(testKeyringTimeoutEnv, "100ms")
+	probeOKThenBlock(t)
+
+	_, err := PersistRefreshToken("rotated", "keyring")
+	require.ErrorIs(t, err, ErrKeyringTimeout)
+	path, err := CredentialsFilePath()
+	require.NoError(t, err)
+	_, statErr := os.Stat(path)
+	require.True(t, errors.Is(statErr, os.ErrNotExist), "must not fall back to plain text")
+
+	backend, err := PersistRefreshToken("rotated", "file")
+	require.NoError(t, err)
+	require.Equal(t, "file", backend)
+}
+
+func TestSaveRefreshTokenToFileSkipsKeyring(t *testing.T) {
+	setTestDirs(t)
 	SetKeyringBackend(mockKeyringBackend{
 		get: func(string, string) (string, error) { t.Fatal("keyring must not be called"); return "", nil },
 		set: func(string, string, string) error { t.Fatal("keyring must not be called"); return nil },
 	})
 	t.Cleanup(ResetKeyring)
 
-	backend, err := SaveRefreshToken("refresh-token")
+	require.NoError(t, SaveRefreshTokenToFile("refresh-token"))
+	token, backend, err := LoadRefreshTokenWithPreferredBackend("file")
 	require.NoError(t, err)
+	require.Equal(t, "refresh-token", token)
 	require.Equal(t, "file", backend)
 }

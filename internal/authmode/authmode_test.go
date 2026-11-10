@@ -67,7 +67,9 @@ func TestResolveRefreshesExpiringSession(t *testing.T) {
 	require.JSONEq(t, `{"refresh_token":"refresh-2"}`, string(body))
 }
 
-func TestResolveKeepsSessionOnInvalidGrant(t *testing.T) {
+// With the lock held, a rejected refresh token is unrecoverable: clear it so
+// later invocations stop resending it (GitHub CLI does the same).
+func TestResolveClearsSessionOnInvalidGrantWhenLockHeld(t *testing.T) {
 	setUserDirs(t)
 	useFileOnlyKeyring(t)
 
@@ -107,11 +109,10 @@ func TestResolveKeepsSessionOnInvalidGrant(t *testing.T) {
 
 	session, loadErr := authstore.LoadSession()
 	require.NoError(t, loadErr)
-	require.NotNil(t, session)
-	require.Equal(t, "old-access", session.AccessToken)
+	require.Nil(t, session)
 
 	_, statErr := os.Stat(credentialsPath(t))
-	require.NoError(t, statErr)
+	require.True(t, os.IsNotExist(statErr))
 }
 
 func TestResolvePersistsVerificationMetadataForLegacySessions(t *testing.T) {

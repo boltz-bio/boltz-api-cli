@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,19 +23,18 @@ const (
 	lockRetryDelay      = 50 * time.Millisecond
 	testDisableKeyring  = "BOLTZ_API_TEST_DISABLE_KEYRING"
 
-	// DisableKeyringEnv turns off the system keyring entirely. Refresh tokens are
-	// then stored in the 0600 credentials file. Useful on headless hosts where the
-	// Secret Service / Keychain can block waiting for an unlock prompt.
-	DisableKeyringEnv = "BOLTZ_API_DISABLE_KEYRING"
-	// KeyringTimeoutEnv overrides how long a single keyring call may take.
-	KeyringTimeoutEnv = "BOLTZ_API_KEYRING_TIMEOUT"
-	// LockTimeoutEnv overrides how long to wait for the session lock.
-	LockTimeoutEnv = "BOLTZ_API_LOCK_TIMEOUT"
+	// Test-only overrides (like testDisableKeyring) so the repro and subprocess
+	// tests don't have to wait out the production timeouts.
+	testKeyringTimeoutEnv = "BOLTZ_API_TEST_KEYRING_TIMEOUT"
+	testLockTimeoutEnv    = "BOLTZ_API_TEST_LOCK_TIMEOUT"
 
-	defaultKeyringTimeout = 10 * time.Second
-	// The lock is only held for one token refresh: at most a few keyring calls
-	// (each bounded by the keyring timeout) plus one token request (bounded by
-	// the OAuth HTTP client timeout). A minute is comfortably above that.
+	// defaultKeyringTimeout bounds each keyring call. It matches GitHub CLI,
+	// which raised its timeout from 3s to 60s because shorter limits cut off
+	// users answering an interactive unlock prompt (cli/cli#13787).
+	defaultKeyringTimeout = 60 * time.Second
+	// defaultLockTimeout bounds the wait for another process's refresh, after
+	// which the caller proceeds without the lock (as GitHub CLI does), so a
+	// stuck holder can never wedge every invocation.
 	defaultLockTimeout = 60 * time.Second
 )
 
@@ -50,23 +48,6 @@ var (
 	// host) or a hung Keychain call.
 	ErrKeyringTimeout = errors.New("system keyring did not respond in time")
 )
-
-// LockTimeoutError is returned when the session lock could not be acquired
-// within the lock timeout.
-type LockTimeoutError struct {
-	Path   string
-	Waited time.Duration
-	// Holder describes the process that most recently took the lock, if known.
-	Holder string
-}
-
-func (e *LockTimeoutError) Error() string {
-	msg := fmt.Sprintf("timed out after %s waiting for session lock %s", e.Waited.Round(time.Second), e.Path)
-	if e.Holder != "" {
-		msg += " (last taken by " + e.Holder + ")"
-	}
-	return msg
-}
 
 type KeyringBackend interface {
 	Get(service, key string) (string, error)
@@ -104,11 +85,11 @@ func durationFromEnv(name string, fallback time.Duration) time.Duration {
 }
 
 func keyringTimeout() time.Duration {
-	return durationFromEnv(KeyringTimeoutEnv, defaultKeyringTimeout)
+	return durationFromEnv(testKeyringTimeoutEnv, defaultKeyringTimeout)
 }
 
 func lockTimeout() time.Duration {
-	return durationFromEnv(LockTimeoutEnv, defaultLockTimeout)
+	return durationFromEnv(testLockTimeoutEnv, defaultLockTimeout)
 }
 
 // withKeyringTimeout runs a keyring call with a deadline. The keyring libraries
@@ -137,30 +118,14 @@ func withKeyringTimeout[T any](fn func() (T, error)) (T, error) {
 	}
 }
 
-// markKeyringUnavailable stops this process from making further keyring calls
-// after one has hung, so a stuck keyring costs at most one timeout per run.
-func markKeyringUnavailable() {
-	keyringAvailabilityMu.Lock()
-	defer keyringAvailabilityMu.Unlock()
-	unavailable := false
-	keyringAvailability = &unavailable
-}
-
 func keyringGet(service, key string) (string, error) {
-	value, err := withKeyringTimeout(func() (string, error) { return currentKeyringBackend().Get(service, key) })
-	if errors.Is(err, ErrKeyringTimeout) {
-		markKeyringUnavailable()
-	}
-	return value, err
+	return withKeyringTimeout(func() (string, error) { return currentKeyringBackend().Get(service, key) })
 }
 
 func keyringSet(service, key, value string) error {
 	_, err := withKeyringTimeout(func() (struct{}, error) {
 		return struct{}{}, currentKeyringBackend().Set(service, key, value)
 	})
-	if errors.Is(err, ErrKeyringTimeout) {
-		markKeyringUnavailable()
-	}
 	return err
 }
 
@@ -168,9 +133,6 @@ func keyringDelete(service, key string) error {
 	_, err := withKeyringTimeout(func() (struct{}, error) {
 		return struct{}{}, currentKeyringBackend().Delete(service, key)
 	})
-	if errors.Is(err, ErrKeyringTimeout) {
-		markKeyringUnavailable()
-	}
 	return err
 }
 
@@ -317,34 +279,69 @@ func ClearSession() error {
 	return nil
 }
 
+// SaveRefreshToken stores a refresh token at login: in the system keyring
+// when it works, otherwise in the 0600 credentials file (GitHub CLI's
+// behavior). It returns the backend used; callers should tell the user when
+// that is "file".
 func SaveRefreshToken(token string) (string, error) {
 	if strings.TrimSpace(token) == "" {
 		return "", ClearRefreshToken()
 	}
 
-	if KeyringAvailable() && keyringSet(keyringService, refreshTokenAccount, token) == nil {
-		if path, pathErr := CredentialsFilePath(); pathErr == nil {
-			_ = os.Remove(path)
+	if KeyringAvailable() {
+		setErr := keyringSet(keyringService, refreshTokenAccount, token)
+		if setErr == nil {
+			if path, pathErr := CredentialsFilePath(); pathErr == nil {
+				_ = os.Remove(path)
+			}
+			return "keyring", nil
+		}
+		// Drop a stale keyring entry so it can't shadow the file, unless the
+		// keyring just hung: don't wait on it a second time.
+		if !errors.Is(setErr, ErrKeyringTimeout) {
+			_ = keyringDelete(keyringService, refreshTokenAccount)
+		}
+	}
+	return "file", saveRefreshTokenFile(token)
+}
+
+// SaveRefreshTokenToFile stores a refresh token in the 0600 credentials file
+// without touching the keyring (`auth login --insecure-storage`).
+func SaveRefreshTokenToFile(token string) error {
+	return saveRefreshTokenFile(token)
+}
+
+// PersistRefreshToken writes a rotated refresh token back to the backend the
+// session already uses. Like GitHub CLI it never silently moves a keyring
+// credential to plain text: if the keyring write fails the error is returned.
+// Sessions with no recorded backend get SaveRefreshToken's behavior.
+func PersistRefreshToken(token, backend string) (string, error) {
+	switch strings.TrimSpace(strings.ToLower(backend)) {
+	case "keyring":
+		if !KeyringAvailable() {
+			return "", ErrKeyringUnavailable
+		}
+		if err := keyringSet(keyringService, refreshTokenAccount, token); err != nil {
+			return "", err
 		}
 		return "keyring", nil
+	case "file":
+		return "file", saveRefreshTokenFile(token)
+	default:
+		return SaveRefreshToken(token)
 	}
+}
 
-	if KeyringAvailable() {
-		_ = keyringDelete(keyringService, refreshTokenAccount)
-	}
-
+func saveRefreshTokenFile(token string) error {
 	path, err := CredentialsFilePath()
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, err := json.MarshalIndent(refreshTokenFile{RefreshToken: token}, "", "  ")
 	if err != nil {
-		return "", err
+		return err
 	}
-	if err := WriteFileAtomically(path, append(body, '\n'), 0o600); err != nil {
-		return "", err
-	}
-	return "file", nil
+	return WriteFileAtomically(path, append(body, '\n'), 0o600)
 }
 
 func LoadRefreshToken() (string, string, error) {
@@ -446,7 +443,7 @@ func KeyringAvailable() bool {
 	keyringAvailabilityMu.Lock()
 	defer keyringAvailabilityMu.Unlock()
 
-	if os.Getenv(testDisableKeyring) != "" || keyringDisabledByEnv() {
+	if os.Getenv(testDisableKeyring) != "" {
 		disabled := false
 		keyringAvailability = &disabled
 		return false
@@ -463,15 +460,6 @@ func KeyringAvailable() bool {
 	available := err == nil || errors.Is(err, keyring.ErrNotFound)
 	keyringAvailability = &available
 	return available
-}
-
-func keyringDisabledByEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(DisableKeyringEnv))) {
-	case "", "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
 }
 
 func SetKeyringBackend(backend KeyringBackend) {
@@ -523,56 +511,39 @@ func ClearAll() error {
 	return ClearRefreshToken()
 }
 
-func WithLock[T any](ctx context.Context, fn func() (T, error)) (T, error) {
-	var zero T
+// refreshMu serializes WithLock callers inside one process; the file lock
+// serializes separate processes.
+var refreshMu sync.Mutex
 
-	lockPath, err := LockFilePath()
-	if err != nil {
-		return zero, err
-	}
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
-		return zero, err
-	}
+// WithLock runs fn while holding the cross-process session lock, which exists
+// to stop concurrent processes from each spending the single-use rotating
+// refresh token. Following GitHub CLI, the lock is best effort: if it cannot be
+// acquired within the lock timeout (a stuck holder, or a filesystem without
+// advisory locks) fn still runs, with lockHeld=false, so a stuck process can
+// never wedge every invocation. fn must skip destructive cleanup when
+// lockHeld is false, since a peer may be mid-refresh. Caller cancellation is
+// still returned as an error.
+func WithLock[T any](ctx context.Context, fn func(lockHeld bool) (T, error)) (T, error) {
+	refreshMu.Lock()
+	defer refreshMu.Unlock()
 
-	wait := lockTimeout()
-	lockCtx, cancel := context.WithTimeout(ctx, wait)
-	defer cancel()
-
-	lock := flock.New(lockPath)
-	ok, err := lock.TryLockContext(lockCtx, lockRetryDelay)
-	if !ok || err != nil {
+	lockHeld := false
+	if lockPath, err := LockFilePath(); err == nil && os.MkdirAll(filepath.Dir(lockPath), 0o700) == nil {
+		lockCtx, cancel := context.WithTimeout(ctx, lockTimeout())
+		lock := flock.New(lockPath)
+		ok, lockErr := lock.TryLockContext(lockCtx, lockRetryDelay)
+		cancel()
 		if ctx.Err() != nil {
+			var zero T
 			return zero, ctx.Err()
 		}
-		if lockCtx.Err() != nil {
-			return zero, &LockTimeoutError{Path: lockPath, Waited: wait, Holder: readLockHolder(lockPath)}
+		if ok && lockErr == nil {
+			lockHeld = true
+			defer lock.Close()
 		}
-		if err == nil {
-			err = context.Canceled
-		}
-		return zero, err
 	}
-	defer lock.Close()
-	recordLockHolder(lockPath)
 
-	return fn()
-}
-
-// recordLockHolder writes the current process into the lock file so a waiter
-// that times out can say who holds it. flock locks the inode, so rewriting the
-// file contents does not affect the lock. Best effort.
-func recordLockHolder(lockPath string) {
-	exe, _ := os.Executable()
-	info := fmt.Sprintf("pid %d (%s) at %s\n", os.Getpid(), filepath.Base(exe), time.Now().UTC().Format(time.RFC3339))
-	_ = os.WriteFile(lockPath, []byte(info), 0o600)
-}
-
-func readLockHolder(lockPath string) string {
-	body, err := os.ReadFile(lockPath)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(body))
+	return fn(lockHeld)
 }
 
 func WriteFileAtomically(path string, data []byte, perm fs.FileMode) error {

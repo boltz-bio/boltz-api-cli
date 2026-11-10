@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -163,6 +164,41 @@ func TestAuthLoginSubprocessOAuthFailurePreservesConfigBytes(t *testing.T) {
 	require.Equal(t, "old-refresh", currentToken)
 }
 
+// Like GitHub CLI: when the keyring can't be used, login stores the refresh
+// token in plain text and says so; --insecure-storage does it on purpose.
+func TestAuthLoginSubprocessReportsPlainTextStorage(t *testing.T) {
+	binary := buildCLIBinary(t)
+	for _, insecure := range []bool{false, true} {
+		t.Run(fmt.Sprintf("insecure=%v", insecure), func(t *testing.T) {
+			env := installFakeBrowserOpener(t, authProcessEnv(t)) // keyring unreachable
+			provider := newSubprocessOIDCProvider(t)
+
+			args := []string{
+				"--auth-issuer-url", provider.IssuerURL(),
+				"--auth-client-id", "client-123",
+				"--auth-scope", "openid",
+				"--listen-port", "0",
+				"auth", "login",
+			}
+			if insecure {
+				args = append(args, "--insecure-storage")
+			}
+			login := runAuthLoginSubprocess(t, binary, env, args...)
+			provider.Close()
+			require.NoError(t, login.Err, login.Stderr)
+			require.Contains(t, login.Stderr, "! Authentication credentials saved in plain text")
+
+			session, err := authstore.LoadSession()
+			require.NoError(t, err)
+			require.NotNil(t, session)
+			require.Equal(t, "file", session.StorageBackend)
+			token, _, err := authstore.LoadRefreshTokenWithPreferredBackend("file")
+			require.NoError(t, err)
+			require.Equal(t, "login-refresh", token)
+		})
+	}
+}
+
 func TestAuthLoginSubprocessWithoutBaseOverridePreservesStoredBaseURL(t *testing.T) {
 	binary := buildCLIBinary(t)
 	t.Setenv(authconfig.EnvBaseURL, "")
@@ -209,9 +245,7 @@ func TestAuthLoginSubprocessInvalidBaseURLFailsBeforeOAuth(t *testing.T) {
 	require.Equal(t, 0, provider.DiscoveryRequests())
 }
 
-// A failed refresh must not delete local state: other CLI processes may be
-// mid-run on the session, and invalid_grant can come from a lost rotation race.
-func TestAuthValidateSubprocessKeepsSessionOnInvalidGrant(t *testing.T) {
+func TestAuthValidateSubprocessClearsInvalidGrantState(t *testing.T) {
 	binary := buildCLIBinary(t)
 	env := authProcessEnv(t)
 
@@ -252,12 +286,11 @@ func TestAuthValidateSubprocessKeepsSessionOnInvalidGrant(t *testing.T) {
 
 	session, err := authstore.LoadSession()
 	require.NoError(t, err)
-	require.NotNil(t, session)
-	require.Equal(t, "expired-access", session.AccessToken)
+	require.Nil(t, session)
 
 	refreshToken, _, err := authstore.LoadRefreshToken()
 	require.NoError(t, err)
-	require.Equal(t, "refresh-token", refreshToken)
+	require.Empty(t, refreshToken)
 }
 
 // Regression test for the reported session wipe: the session says the refresh

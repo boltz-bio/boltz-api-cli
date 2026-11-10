@@ -85,14 +85,22 @@ func SessionMatches(resolved authconfig.Resolved, session authstore.Session) boo
 // read happen before it is taken; under the lock we only re-read session.json,
 // make the token request, and write the results.
 //
-// A failed refresh never deletes the stored session. Other processes may be
-// mid-run on it, and the failure may be transient (keyring unreachable, lost
-// rotation race, network). `auth login` overwrites it, `auth logout` clears it.
+// Failure handling follows GitHub CLI's refreshable credentials:
+//   - A transient failure (keyring unreachable or slow, network) never deletes
+//     anything: other processes may be mid-run on the session.
+//   - A refresh token the server rejects (invalid_grant), after re-reading the
+//     store for a rotated one, clears the local credential so every later
+//     invocation stops resending it, but only when we hold the lock. Without
+//     the lock the rejection is ambiguous (a peer may have just spent the same
+//     token and be about to write its replacement), so storage is left alone.
+//   - A rotated token is written back to the same backend; if that write
+//     fails the error says to log in again rather than silently moving the
+//     credential to plain text.
 func refreshSession(ctx context.Context, resolved authconfig.Resolved, observed *authstore.Session) (*authstore.Session, error) {
 	providerMetadata := resolveRefreshProvider(ctx, resolved, observed)
 	refreshToken, backend, tokenErr := authstore.LoadRefreshTokenWithPreferredBackend(observed.StorageBackend)
 
-	session, err := authstore.WithLock(ctx, func() (*authstore.Session, error) {
+	session, err := authstore.WithLock(ctx, func(lockHeld bool) (*authstore.Session, error) {
 		current, err := authstore.LoadSession()
 		if err != nil {
 			return nil, autherror.New("session_load_failed", "Failed to load OAuth session", err.Error())
@@ -132,6 +140,10 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved, observed 
 		}
 		if err != nil {
 			if oauthclient.IsInvalidGrant(err) {
+				if lockHeld {
+					// Best effort: a failure here doesn't change the outcome.
+					_ = authstore.ClearAll()
+				}
 				return nil, ReauthError("Stored OAuth session is no longer valid")
 			}
 			return nil, autherror.New("token_refresh_failed", "Failed to refresh OAuth access token", err.Error())
@@ -148,9 +160,11 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved, observed 
 			current.GrantedScopes = append([]string(nil), tokens.GrantedScopes...)
 		}
 		if tokens.RefreshToken != "" {
-			backend, err = authstore.SaveRefreshToken(tokens.RefreshToken)
+			backend, err = authstore.PersistRefreshToken(tokens.RefreshToken, backend)
 			if err != nil {
-				return nil, autherror.New("refresh_token_store_failed", "Failed to store rotated refresh token", err.Error())
+				// The server has already rotated the old token, so this session
+				// can't be refreshed again.
+				return nil, ReauthError("Failed to store the rotated refresh token: " + err.Error())
 			}
 		}
 		current.StorageBackend = backend
@@ -169,14 +183,6 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved, observed 
 		return current, nil
 	})
 	if err != nil {
-		var lockErr *authstore.LockTimeoutError
-		if errors.As(err, &lockErr) {
-			// The holder may have finished a refresh just before we gave up.
-			if latest, loadErr := authstore.LoadSession(); loadErr == nil && latest != nil && SessionMatches(resolved, *latest) && usableAccessToken(latest) {
-				return latest, nil
-			}
-			return nil, lockTimeoutError(lockErr)
-		}
 		return nil, err
 	}
 	return session, nil
@@ -247,22 +253,11 @@ func refreshTokenLoadError(err error) error {
 			"keyring_unavailable",
 			"Could not read the refresh token from the system keyring",
 			err.Error()+". The stored session was kept; retry once the keyring is reachable.",
-			"On headless hosts, set `"+authstore.DisableKeyringEnv+"=1` and run `boltz-api auth login` to store the refresh token in a 0600 file instead.",
+			"On headless hosts, run `boltz-api auth login --insecure-storage` to keep the refresh token in a 0600 file instead of the keyring.",
 			"Set `--api-key` or `BOLTZ_API_KEY` to use API-key mode instead.",
 		)
 	}
 	return autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
-}
-
-func lockTimeoutError(err *authstore.LockTimeoutError) error {
-	return autherror.NewWithHints(
-		"session_lock_timeout",
-		"Timed out waiting for another boltz-api process to finish refreshing the OAuth session",
-		err.Error()+".",
-		"If that process is stuck (often on a keyring prompt), stop it and retry.",
-		"Raise the wait with `"+authstore.LockTimeoutEnv+"` (for example `120s`).",
-		"Set `--api-key` or `BOLTZ_API_KEY` to use API-key mode, which never takes the lock.",
-	)
 }
 
 func needsVerificationMetadata(provider oauthclient.ProviderMetadata) bool {

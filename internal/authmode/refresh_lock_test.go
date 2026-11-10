@@ -64,6 +64,7 @@ func holdSessionLock(t *testing.T) *flock.Flock {
 	ok, err := lock.TryLock()
 	require.NoError(t, err)
 	require.True(t, ok)
+	t.Cleanup(func() { _ = lock.Close() })
 	return lock
 }
 
@@ -176,26 +177,87 @@ func TestRefreshUsesSessionRefreshedByLockHolder(t *testing.T) {
 	require.Equal(t, "holder-access", result.AccessToken)
 }
 
-func TestRefreshLockTimeoutNamesLockAndKeepsSession(t *testing.T) {
+// A stuck lock holder must not block everyone: after the lock timeout the
+// refresh proceeds without the lock.
+func TestRefreshProceedsWithoutLockAfterTimeout(t *testing.T) {
 	setUserDirs(t)
 	useFileOnlyKeyring(t)
 	fixedNow := freezeNow(t)
-	t.Setenv(authstore.LockTimeoutEnv, "200ms")
+	t.Setenv("BOLTZ_API_TEST_LOCK_TIMEOUT", "200ms")
 
-	require.NoError(t, authstore.SaveSession(expiredSession(fixedNow, "http://127.0.0.1:1", "file")))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"refresh-2","token_type":"Bearer","expires_in":600}`))
+	}))
+	defer server.Close()
+
+	require.NoError(t, authstore.SaveSession(expiredSession(fixedNow, server.URL, "file")))
 	writeRefreshTokenFile(t, "refresh-1")
+	holdSessionLock(t)
 
-	lock := holdSessionLock(t)
-	defer lock.Close()
+	result, err := Resolve(context.Background(), testResolved)
+	require.NoError(t, err)
+	require.Equal(t, "new-access", result.AccessToken)
+}
+
+// Without the lock, invalid_grant may mean a peer just spent the same token
+// and is about to write its replacement, so nothing is deleted.
+func TestInvalidGrantWithoutLockKeepsSession(t *testing.T) {
+	setUserDirs(t)
+	useFileOnlyKeyring(t)
+	fixedNow := freezeNow(t)
+	t.Setenv("BOLTZ_API_TEST_LOCK_TIMEOUT", "200ms")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	}))
+	defer server.Close()
+
+	require.NoError(t, authstore.SaveSession(expiredSession(fixedNow, server.URL, "file")))
+	writeRefreshTokenFile(t, "refresh-1")
+	holdSessionLock(t)
 
 	_, err := Resolve(context.Background(), testResolved)
-	require.Equal(t, "session_lock_timeout", authErrCode(t, err))
-	lockPath, _ := authstore.LockFilePath()
-	require.Contains(t, err.Error(), lockPath)
+	require.Equal(t, "reauth_required", authErrCode(t, err))
 
 	session, err := authstore.LoadSession()
 	require.NoError(t, err)
 	require.NotNil(t, session)
+	_, statErr := os.Stat(credentialsPath(t))
+	require.NoError(t, statErr)
+}
+
+// A rotated token that can't be written back to the keyring is reported (log in
+// again), not silently moved to plain text.
+func TestRefreshDoesNotDowngradeKeyringToFile(t *testing.T) {
+	setUserDirs(t)
+	fixedNow := freezeNow(t)
+	authstore.SetKeyringBackend(mockKeyringBackend{
+		get: func(service, key string) (string, error) {
+			if service == "boltz-api-cli-probe" {
+				return "", nil
+			}
+			return "refresh-1", nil
+		},
+		set: func(service, key, value string) error { return errors.New("keyring write failed") },
+	})
+	t.Cleanup(authstore.ResetKeyring)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"refresh-2","token_type":"Bearer","expires_in":600}`))
+	}))
+	defer server.Close()
+	require.NoError(t, authstore.SaveSession(expiredSession(fixedNow, server.URL, "keyring")))
+
+	_, err := Resolve(context.Background(), testResolved)
+	require.Equal(t, "reauth_required", authErrCode(t, err))
+	require.Contains(t, err.Error(), "keyring write failed")
+
+	_, statErr := os.Stat(credentialsPath(t))
+	require.True(t, os.IsNotExist(statErr), "refresh token must not be written to plain text")
 }
 
 // Unexpired sessions never touch the lock.
@@ -203,14 +265,12 @@ func TestResolveWithFreshTokenIgnoresHeldLock(t *testing.T) {
 	setUserDirs(t)
 	useFileOnlyKeyring(t)
 	fixedNow := freezeNow(t)
-	t.Setenv(authstore.LockTimeoutEnv, "100ms")
 
 	fresh := expiredSession(fixedNow, "http://127.0.0.1:1", "file")
 	fresh.Expiry = fixedNow.Add(10 * time.Minute)
 	require.NoError(t, authstore.SaveSession(fresh))
 
-	lock := holdSessionLock(t)
-	defer lock.Close()
+	holdSessionLock(t)
 
 	result, err := Resolve(context.Background(), testResolved)
 	require.NoError(t, err)

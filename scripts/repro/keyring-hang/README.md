@@ -18,10 +18,12 @@ Scenario 1, the hang: the prompt never completes, as on a headless or SSH host w
   - The lock holder and `whoami` are both stuck in `go-keyring`'s `handlePrompt`.
   - A second command waits on the flock.
   - Killing the holder passes both the lock and the hang to the next process.
-- New binary: every command fails within `BOLTZ_API_KEYRING_TIMEOUT` with `keyring_unavailable`.
+- New binary: every command fails within the keyring timeout (60s in production; the repro shortens it to 3s with a test-only variable) with `keyring_unavailable`.
 
 Scenario 2, the wipe: the prompt is dismissed, which looks the same to the CLI as an unreachable keyring.
 - Old binary: deletes `session.json`.
 - New binary: keeps it.
+
+Scenario 3, new binary only: a session created with `auth login --insecure-storage` never contacts the keyring, even while it hangs.
 
 `TestAuthValidateSubprocessKeepsSessionWhenKeyringUnreachable` covers scenario 2 in CI on every OS.

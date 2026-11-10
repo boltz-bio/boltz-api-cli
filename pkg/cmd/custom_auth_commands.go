@@ -22,6 +22,10 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+// authNoticeWriter receives login notices (stderr, like GitHub CLI's
+// "credentials saved in plain text"). The root ErrWriter only flushes on error.
+var authNoticeWriter io.Writer = os.Stderr
+
 const authStatusWarningScopeMismatch = "Granted OAuth scopes do not include the full configured scope set."
 
 const (
@@ -45,8 +49,12 @@ var authCommand = &cli.Command{
 	HideHelpCommand: true,
 	Commands: []*cli.Command{
 		{
-			Name:            "login",
-			Usage:           "Run the OAuth login flow and persist the resulting session",
+			Name:  "login",
+			Usage: "Run the OAuth login flow and persist the resulting session",
+			Description: "The refresh token is stored in the system keyring. If no keyring is available, or using it\n" +
+				"fails, it is written to a plain-text 0600 file instead; `boltz-api auth status` shows where.\n" +
+				"Use --insecure-storage to skip the keyring, for example on headless hosts where it can\n" +
+				"block waiting for an unlock prompt.",
 			Action:          handleAuthLogin,
 			HideHelpCommand: true,
 			Flags: []cli.Flag{
@@ -57,6 +65,10 @@ var authCommand = &cli.Command{
 				&cli.BoolFlag{
 					Name:  "json-events",
 					Usage: "Emit newline-delimited JSON progress events for device-code login",
+				},
+				&cli.BoolFlag{
+					Name:  "insecure-storage",
+					Usage: "Save the refresh token in a plain-text 0600 file instead of the system keyring (for headless hosts)",
 				},
 			},
 		},
@@ -323,18 +335,30 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	_, err = authstore.WithLock(ctx, func() (struct{}, error) {
+	insecureStorage := cmd.Bool("insecure-storage")
+	insecureStorageUsed := false
+	_, err = authstore.WithLock(ctx, func(bool) (struct{}, error) {
 		previousSession, loadErr := authstore.LoadSession()
 		if loadErr != nil {
 			return struct{}{}, autherror.New("session_load_failed", "Failed to load the existing OAuth session", loadErr.Error())
 		}
-		previousRefreshToken, _, loadErr := authstore.LoadRefreshToken()
+		previousBackend := ""
+		if previousSession != nil {
+			previousBackend = previousSession.StorageBackend
+		} else if insecureStorage {
+			previousBackend = "file"
+		}
+		previousRefreshToken, _, loadErr := authstore.LoadRefreshTokenWithPreferredBackend(previousBackend)
+		if errors.Is(loadErr, authstore.ErrKeyringUnavailable) || errors.Is(loadErr, authstore.ErrKeyringTimeout) {
+			// The old token can't be read for rollback; login replaces it anyway.
+			loadErr = nil
+		}
 		if loadErr != nil {
 			return struct{}{}, autherror.New("refresh_token_load_failed", "Failed to load the existing refresh token", loadErr.Error())
 		}
 
 		rollback := func(code, message string, cause error) error {
-			restoreErr := restoreLoginState(previousSession, previousRefreshToken)
+			restoreErr := restoreLoginState(previousSession, previousRefreshToken, previousBackend)
 			if restoreErr != nil {
 				return autherror.New(code, message, cause.Error()+". Rollback failed: "+restoreErr.Error())
 			}
@@ -344,10 +368,15 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		backend := ""
 		if strings.TrimSpace(result.Tokens.RefreshToken) != "" {
 			var storeErr error
-			backend, storeErr = authstore.SaveRefreshToken(result.Tokens.RefreshToken)
+			if insecureStorage {
+				backend, storeErr = "file", authstore.SaveRefreshTokenToFile(result.Tokens.RefreshToken)
+			} else {
+				backend, storeErr = authstore.SaveRefreshToken(result.Tokens.RefreshToken)
+			}
 			if storeErr != nil {
 				return struct{}{}, rollback("refresh_token_store_failed", "Failed to store refresh token", storeErr)
 			}
+			insecureStorageUsed = backend == "file"
 		} else {
 			if clearErr := authstore.ClearRefreshToken(); clearErr != nil {
 				return struct{}{}, rollback("refresh_token_store_failed", "Failed to clear stale refresh token", clearErr)
@@ -390,7 +419,13 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	const plainTextNotice = "Authentication credentials saved in plain text"
 	if jsonEvents.enabled {
+		if insecureStorageUsed {
+			if err := jsonEvents.write(map[string]any{"event": "warning", "message": plainTextNotice}); err != nil {
+				return err
+			}
+		}
 		if err := jsonEvents.write(map[string]any{"event": "success"}); err != nil {
 			return err
 		}
@@ -403,6 +438,9 @@ func handleAuthLogin(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
+	if insecureStorageUsed {
+		fmt.Fprintln(authNoticeWriter, "! "+plainTextNotice)
+	}
 	fmt.Fprintln(writer, "Authentication successful.")
 	if strings.TrimSpace(resolved.APIKey) != "" {
 		fmt.Fprintln(writer, "API-key mode is still active for commands in this shell. Clear `--api-key` or `BOLTZ_API_KEY` to use the stored OAuth session.")
@@ -485,12 +523,20 @@ func handleAuthLogout(ctx context.Context, cmd *cli.Command) error {
 		refreshToken string
 	}
 
-	snapshot, err := authstore.WithLock(ctx, func() (logoutSnapshot, error) {
+	snapshot, err := authstore.WithLock(ctx, func(bool) (logoutSnapshot, error) {
 		session, err := authstore.LoadSession()
 		if err != nil {
 			return logoutSnapshot{}, autherror.New("session_load_failed", "Failed to load OAuth session", err.Error())
 		}
-		refreshToken, _, err := authstore.LoadRefreshToken()
+		preferredBackend := ""
+		if session != nil {
+			preferredBackend = session.StorageBackend
+		}
+		refreshToken, _, err := authstore.LoadRefreshTokenWithPreferredBackend(preferredBackend)
+		if errors.Is(err, authstore.ErrKeyringUnavailable) || errors.Is(err, authstore.ErrKeyringTimeout) {
+			// Still clear local state; revocation falls back to the access token.
+			err = nil
+		}
 		if err != nil {
 			return logoutSnapshot{}, autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
 		}
@@ -1076,7 +1122,7 @@ func applyValidateModeNotes(response *authValidateResponse, mode authmode.Mode) 
 	})
 }
 
-func restoreLoginState(previousSession *authstore.Session, previousRefreshToken string) error {
+func restoreLoginState(previousSession *authstore.Session, previousRefreshToken, previousBackend string) error {
 	var restoreErrs []string
 	if previousSession != nil {
 		if err := authstore.SaveSession(*previousSession); err != nil {
@@ -1087,7 +1133,7 @@ func restoreLoginState(previousSession *authstore.Session, previousRefreshToken 
 	}
 
 	if strings.TrimSpace(previousRefreshToken) != "" {
-		if _, err := authstore.SaveRefreshToken(previousRefreshToken); err != nil {
+		if _, err := authstore.PersistRefreshToken(previousRefreshToken, previousBackend); err != nil {
 			restoreErrs = append(restoreErrs, "refresh token: "+err.Error())
 		}
 	} else if err := authstore.ClearRefreshToken(); err != nil {

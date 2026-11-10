@@ -138,18 +138,14 @@ configured with:
 - `BOLTZ_API_ORG`
 - `BOLTZ_API_LISTEN_PORT`
 
-OAuth refresh tokens are stored in the system keyring when one is reachable,
-otherwise in a `0600` credentials file. These settings control that storage and
-the refresh lock:
-
-- `BOLTZ_API_DISABLE_KEYRING=1`: never use the system keyring. Use this on
-  headless or shared hosts where the keyring can block waiting for an unlock
-  prompt. Run `boltz-api auth login` again after setting it.
-- `BOLTZ_API_KEYRING_TIMEOUT` (default `10s`): the longest a single keyring call
-  may take before the CLI treats the keyring as unavailable.
-- `BOLTZ_API_LOCK_TIMEOUT` (default `60s`): the longest to wait for another
-  `boltz-api` process to finish refreshing the OAuth session.
-  API-key mode never takes this lock.
+`boltz-api auth login` stores the OAuth refresh token in the system keyring.
+If no keyring is available, or using it fails, the token is written to a
+plain-text `0600` file instead, and login prints
+`! Authentication credentials saved in plain text`. `boltz-api auth status`
+shows which storage is in use. Pass `--insecure-storage` to skip the keyring,
+for example on headless hosts where it can block waiting for an unlock prompt.
+Each keyring call gives up after 60 seconds. API-key mode (`--api-key` or
+`BOLTZ_API_KEY`) never uses the keyring.
 
 ### Global flags
 

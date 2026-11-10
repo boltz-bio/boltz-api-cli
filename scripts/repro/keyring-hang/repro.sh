@@ -6,7 +6,7 @@ export HOME=/home/u XDG_CONFIG_HOME=/home/u/.config XDG_CACHE_HOME=/home/u/.cach
 export BOLTZ_API_AUTH_ISSUER_URL=https://issuer.example.com BOLTZ_API_AUTH_CLIENT_ID=client-123
 export BOLTZ_API_AUTH_SCOPE=openid BOLTZ_API_AUTH_AUDIENCE=boltz-compute-api BOLTZ_API_NO_UPDATE_CHECK=1
 export BOLTZ_BASE_URL=http://127.0.0.1:1
-export BOLTZ_API_KEYRING_TIMEOUT=3s BOLTZ_API_LOCK_TIMEOUT=8s   # unknown to the old binary
+export BOLTZ_API_TEST_KEYRING_TIMEOUT=3s BOLTZ_API_TEST_LOCK_TIMEOUT=8s   # test-only; default 60s each
 mkdir -p $XDG_CACHE_HOME/boltz-api
 SESSION=$XDG_CACHE_HOME/boltz-api/session.json
 LOCK=$XDG_CACHE_HOME/boltz-api/session.lock
@@ -61,3 +61,13 @@ echo dismiss > /tmp/ss-mode; write_session
 timeout 60 $BIN $LIST >/tmp/c.out 2>&1
 echo "  result: $(grep -oE '"(code|message)": *"[^"]*"' /tmp/c.out | head -2 | tr '\n' ' ')"
 echo "session.json after scenario 2: $([ -f $SESSION ] && echo present || echo 'DELETED  <-- every other in-flight run now fails')"
+
+if [ "$1" = new ]; then
+echo "--- Scenario 3: session from 'auth login --insecure-storage' while the keyring hangs ---"
+echo hang > /tmp/ss-mode; write_session
+sed -i 's/"storage_backend":"keyring"/"storage_backend":"file"/' $SESSION
+mkdir -p $XDG_CONFIG_HOME/boltz-api && echo '{"refresh_token":"r1"}' > $XDG_CONFIG_HOME/boltz-api/credentials.json
+before=$(grep -c Unlock /tmp/ss.log); S=$SECONDS
+timeout 60 $BIN $LIST >/tmp/e.out 2>&1
+echo "  finished in $((SECONDS-S))s, keyring unlock requests made: $(( $(grep -c Unlock /tmp/ss.log) - before ))  (refresh then fails only because the fake token URL is unreachable)"
+fi
