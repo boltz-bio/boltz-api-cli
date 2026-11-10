@@ -13,6 +13,7 @@ import (
 	"github.com/boltz-bio/boltz-api-cli/internal/authconfig"
 	"github.com/boltz-bio/boltz-api-cli/internal/autherror"
 	"github.com/boltz-bio/boltz-api-cli/internal/authstore"
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 )
@@ -112,6 +113,98 @@ func TestResolveClearsSessionOnInvalidGrant(t *testing.T) {
 	_, statErr := os.Stat(credentialsPath(t))
 	require.Error(t, statErr)
 	require.True(t, os.IsNotExist(statErr))
+}
+
+// The reported session wipe: the refresh token can't be read (keyring
+// unreachable in this process), which must not delete the shared session.
+func TestResolveKeepsSessionWhenRefreshTokenMissing(t *testing.T) {
+	setUserDirs(t)
+	useFileOnlyKeyring(t)
+
+	fixedNow := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	originalNow := now
+	now = func() time.Time { return fixedNow }
+	t.Cleanup(func() { now = originalNow })
+
+	require.NoError(t, authstore.SaveSession(authstore.Session{
+		IssuerURL:      "https://issuer.example.com",
+		ClientID:       "client-123",
+		Scopes:         []string{"openid"},
+		AccessToken:    "old-access",
+		Expiry:         fixedNow.Add(-1 * time.Minute),
+		TokenURL:       "http://127.0.0.1:1/token",
+		JWKSURL:        "https://issuer.example.com/jwks",
+		Algorithms:     []string{"RS256"},
+		StorageBackend: "keyring",
+	}))
+
+	_, err := Resolve(context.Background(), authconfig.Resolved{
+		IssuerURL: "https://issuer.example.com",
+		ClientID:  "client-123",
+		Scopes:    []string{"openid"},
+	})
+	var authErr *autherror.Error
+	require.True(t, errors.As(err, &authErr))
+	require.Equal(t, "reauth_required", authErr.Envelope().Code)
+
+	session, loadErr := authstore.LoadSession()
+	require.NoError(t, loadErr)
+	require.NotNil(t, session)
+}
+
+// Without the lock, invalid_grant may be a lost race with a peer that is about
+// to save the rotated token, so nothing is deleted.
+func TestResolveKeepsSessionOnInvalidGrantWithoutLock(t *testing.T) {
+	setUserDirs(t)
+	useFileOnlyKeyring(t)
+	originalLockTimeout := authstore.LockTimeout
+	authstore.LockTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { authstore.LockTimeout = originalLockTimeout })
+
+	fixedNow := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	originalNow := now
+	now = func() time.Time { return fixedNow }
+	t.Cleanup(func() { now = originalNow })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	}))
+	defer server.Close()
+
+	require.NoError(t, authstore.SaveSession(authstore.Session{
+		IssuerURL:   "https://issuer.example.com",
+		ClientID:    "client-123",
+		Scopes:      []string{"openid"},
+		AccessToken: "old-access",
+		Expiry:      fixedNow.Add(-1 * time.Minute),
+		TokenURL:    server.URL,
+		JWKSURL:     "https://issuer.example.com/jwks",
+		Algorithms:  []string{"RS256"},
+	}))
+	writeRefreshTokenFile(t, "refresh-1")
+
+	lockPath, err := authstore.LockFilePath()
+	require.NoError(t, err)
+	holder := flock.New(lockPath)
+	ok, err := holder.TryLock()
+	require.NoError(t, err)
+	require.True(t, ok)
+	defer holder.Close()
+
+	_, err = Resolve(context.Background(), authconfig.Resolved{
+		IssuerURL: "https://issuer.example.com",
+		ClientID:  "client-123",
+		Scopes:    []string{"openid"},
+	})
+	require.Error(t, err)
+
+	session, loadErr := authstore.LoadSession()
+	require.NoError(t, loadErr)
+	require.NotNil(t, session)
+	_, statErr := os.Stat(credentialsPath(t))
+	require.NoError(t, statErr)
 }
 
 func TestResolvePersistsVerificationMetadataForLegacySessions(t *testing.T) {

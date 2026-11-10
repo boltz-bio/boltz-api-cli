@@ -44,11 +44,62 @@ func (d defaultKeyringBackend) Delete(service, key string) error {
 }
 
 var (
+	// KeyringTimeout bounds each keyring call. The keyring libraries can block
+	// forever (Secret Service waits on an unlock prompt nobody can answer on a
+	// headless host; macOS runs /usr/bin/security unbounded). 60s matches
+	// GitHub CLI, long enough to answer a real prompt.
+	KeyringTimeout = 60 * time.Second
+	// LockTimeout bounds the wait for another process's refresh. After it, the
+	// caller proceeds without the lock (as GitHub CLI does), so one stuck
+	// process can't block every invocation.
+	LockTimeout = 60 * time.Second
+
+	// ErrKeyringTimeout is returned when a keyring call exceeds KeyringTimeout.
+	ErrKeyringTimeout = errors.New("system keyring did not respond in time")
+
 	keyringBackend KeyringBackend = defaultKeyringBackend{}
 
 	keyringAvailability   *bool
 	keyringAvailabilityMu sync.Mutex
 )
+
+// withKeyringTimeout runs a keyring call, giving up after KeyringTimeout. The
+// call can't be cancelled, so on timeout it is left running in its goroutine.
+func withKeyringTimeout[T any](fn func() (T, error)) (T, error) {
+	type result struct {
+		value T
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, err := fn()
+		done <- result{value, err}
+	}()
+	select {
+	case r := <-done:
+		return r.value, r.err
+	case <-time.After(KeyringTimeout):
+		var zero T
+		return zero, ErrKeyringTimeout
+	}
+}
+
+func keyringGet(service, key string) (string, error) {
+	b := keyringBackend
+	return withKeyringTimeout(func() (string, error) { return b.Get(service, key) })
+}
+
+func keyringSet(service, key, value string) error {
+	b := keyringBackend
+	_, err := withKeyringTimeout(func() (struct{}, error) { return struct{}{}, b.Set(service, key, value) })
+	return err
+}
+
+func keyringDelete(service, key string) error {
+	b := keyringBackend
+	_, err := withKeyringTimeout(func() (struct{}, error) { return struct{}{}, b.Delete(service, key) })
+	return err
+}
 
 type Identity struct {
 	Subject           string         `json:"subject,omitempty"`
@@ -185,7 +236,7 @@ func SaveRefreshToken(token string) (string, error) {
 		return "", ClearRefreshToken()
 	}
 
-	if KeyringAvailable() && keyringBackend.Set(keyringService, refreshTokenAccount, token) == nil {
+	if KeyringAvailable() && keyringSet(keyringService, refreshTokenAccount, token) == nil {
 		if path, pathErr := CredentialsFilePath(); pathErr == nil {
 			_ = os.Remove(path)
 		}
@@ -193,7 +244,7 @@ func SaveRefreshToken(token string) (string, error) {
 	}
 
 	if KeyringAvailable() {
-		_ = keyringBackend.Delete(keyringService, refreshTokenAccount)
+		_ = keyringDelete(keyringService, refreshTokenAccount)
 	}
 
 	path, err := CredentialsFilePath()
@@ -239,7 +290,7 @@ func LoadRefreshTokenWithPreferredBackend(preferred string) (string, string, err
 
 func loadRefreshTokenFromKeyring() (string, string, error) {
 	if KeyringAvailable() {
-		token, err := keyringBackend.Get(keyringService, refreshTokenAccount)
+		token, err := keyringGet(keyringService, refreshTokenAccount)
 		switch {
 		case err == nil && strings.TrimSpace(token) != "":
 			return token, "keyring", nil
@@ -279,7 +330,7 @@ func loadRefreshTokenFromFile() (string, string, error) {
 func ClearRefreshToken() error {
 	var keyringErr error
 	if KeyringAvailable() {
-		if err := keyringBackend.Delete(keyringService, refreshTokenAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		if err := keyringDelete(keyringService, refreshTokenAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 			keyringErr = err
 		}
 	}
@@ -308,7 +359,7 @@ func KeyringAvailable() bool {
 		return *keyringAvailability
 	}
 
-	_, err := keyringBackend.Get(keyringService+"-probe", "availability-check")
+	_, err := keyringGet(keyringService+"-probe", "availability-check")
 	available := err == nil || errors.Is(err, keyring.ErrNotFound)
 	keyringAvailability = &available
 	return available
@@ -350,7 +401,7 @@ func ClearRefreshTokenKeyring() error {
 	if !KeyringAvailable() {
 		return nil
 	}
-	if err := keyringBackend.Delete(keyringService, refreshTokenAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+	if err := keyringDelete(keyringService, refreshTokenAccount); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return err
 	}
 	return nil
@@ -363,7 +414,12 @@ func ClearAll() error {
 	return ClearRefreshToken()
 }
 
-func WithLock[T any](ctx context.Context, fn func() (T, error)) (T, error) {
+// WithLock runs fn while holding the cross-process session lock, which stops
+// concurrent processes from each spending the single-use rotating refresh
+// token. The lock is best effort: if it isn't acquired within LockTimeout, fn
+// runs anyway with lockHeld=false and must then skip destructive cleanup, since
+// a peer may be mid-refresh. Caller cancellation is returned as an error.
+func WithLock[T any](ctx context.Context, fn func(lockHeld bool) (T, error)) (T, error) {
 	var zero T
 
 	lockPath, err := LockFilePath()
@@ -374,17 +430,17 @@ func WithLock[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 		return zero, err
 	}
 
+	lockCtx, cancel := context.WithTimeout(ctx, LockTimeout)
+	defer cancel()
 	lock := flock.New(lockPath)
-	ok, err := lock.TryLockContext(ctx, lockRetryDelay)
-	if err != nil {
-		return zero, err
+	ok, err := lock.TryLockContext(lockCtx, lockRetryDelay)
+	if ctx.Err() != nil {
+		return zero, ctx.Err()
 	}
-	if !ok {
-		return zero, context.Canceled
+	if ok && err == nil {
+		defer lock.Close()
 	}
-	defer lock.Close()
-
-	return fn()
+	return fn(ok && err == nil)
 }
 
 func WriteFileAtomically(path string, data []byte, perm fs.FileMode) error {
