@@ -133,6 +133,7 @@ type whoAmIResponse struct {
 	Expiry              *time.Time      `json:"expiry,omitempty"`
 	Identity            *whoAmIIdentity `json:"identity,omitempty"`
 	Sources             whoAmISources   `json:"sources,omitempty"`
+	Warnings            []string        `json:"warnings,omitempty"`
 }
 
 type whoAmIIdentity struct {
@@ -565,6 +566,10 @@ func handleAuthWhoAmI(ctx context.Context, cmd *cli.Command) error {
 	}
 	if response.StorageBackend == "" {
 		response.StorageBackend = snapshot.refreshBackend
+	}
+	if snapshot.keyringErr != nil {
+		response.Warnings = append(response.Warnings,
+			"Could not read the refresh token from the system keyring: "+snapshot.keyringErr.Error()+".")
 	}
 
 	return showJSONValue(cmd, response, "auth whoami")

@@ -260,6 +260,48 @@ func TestAuthValidateSubprocessKeepsSessionOnInvalidGrant(t *testing.T) {
 	require.Equal(t, "refresh-token", refreshToken)
 }
 
+// Regression test for the reported session wipe: the session says the refresh
+// token lives in the keyring, but this process cannot reach the keyring
+// (dismissed unlock prompt, no D-Bus session, keyring daemon restarted). The
+// old code read that as "no refresh token" and deleted session.json for every
+// other process using it.
+func TestAuthValidateSubprocessKeepsSessionWhenKeyringUnreachable(t *testing.T) {
+	binary := buildCLIBinary(t)
+	env := authProcessEnv(t) // BOLTZ_API_TEST_DISABLE_KEYRING=1: keyring unreachable
+
+	require.NoError(t, authconfig.SaveProfile(authconfig.Resolved{
+		IssuerURL: "https://issuer.example.com",
+		ClientID:  "client-123",
+		Audience:  authconfig.DefaultAudience,
+		Scopes:    []string{"openid"},
+	}))
+	require.NoError(t, authstore.SaveSession(authstore.Session{
+		IssuerURL:      "https://issuer.example.com",
+		ClientID:       "client-123",
+		Audience:       authconfig.DefaultAudience,
+		Scopes:         []string{"openid"},
+		AccessToken:    "expired-access",
+		TokenType:      "Bearer",
+		Expiry:         time.Now().Add(-1 * time.Hour),
+		TokenURL:       "http://127.0.0.1:1/token",
+		JWKSURL:        "https://issuer.example.com/jwks",
+		Algorithms:     []string{"RS256"},
+		StorageBackend: "keyring",
+	}))
+
+	result := runCLI(t, binary, env, "--format", "json", "auth", "validate")
+	require.Equal(t, 1, result.ExitCode)
+	require.Contains(t, result.Stdout, "system keyring")
+
+	session, err := authstore.LoadSession()
+	require.NoError(t, err)
+	require.NotNil(t, session, "session.json must not be deleted when the keyring is unreachable")
+
+	whoami := runCLI(t, binary, env, "--format", "json", "auth", "whoami")
+	require.Equal(t, 0, whoami.ExitCode, whoami.Stderr)
+	require.Contains(t, whoami.Stdout, "Could not read the refresh token from the system keyring")
+}
+
 type cliResult struct {
 	Stdout   string
 	Stderr   string
