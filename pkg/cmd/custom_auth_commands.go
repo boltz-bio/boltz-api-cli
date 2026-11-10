@@ -4,6 +4,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -811,6 +812,9 @@ type authSnapshot struct {
 	sessionMatch   bool
 	config         authConfigDetails
 	sources        whoAmISources
+	// keyringErr is set when the refresh token could not be read because the
+	// system keyring is unreachable. The token may still exist there.
+	keyringErr error
 }
 
 func loadAuthSnapshot(cmd *cli.Command) (authSnapshot, error) {
@@ -831,6 +835,13 @@ func loadAuthSnapshot(cmd *cli.Command) (authSnapshot, error) {
 		preferredBackend = session.StorageBackend
 	}
 	refreshToken, backend, err := authstore.LoadRefreshTokenWithPreferredBackend(preferredBackend)
+	var keyringErr error
+	if errors.Is(err, authstore.ErrKeyringUnavailable) || errors.Is(err, authstore.ErrKeyringTimeout) {
+		// Inspection commands must not fail (or hang) because the keyring is
+		// unreachable; report it instead.
+		keyringErr, err = err, nil
+		refreshToken, backend = "", "keyring"
+	}
 	if err != nil {
 		return authSnapshot{}, autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
 	}
@@ -844,6 +855,7 @@ func loadAuthSnapshot(cmd *cli.Command) (authSnapshot, error) {
 		mode:           authmode.DescribeMode(resolved, session),
 		sessionMatch:   sessionMatch,
 		config:         configDetails,
+		keyringErr:     keyringErr,
 		sources: whoAmISources{
 			APIKey:       resolved.Sources.APIKey,
 			IssuerURL:    resolved.Sources.IssuerURL,
@@ -900,6 +912,11 @@ func buildAuthStatusResponse(snapshot authSnapshot) (authStatusResponse, bool) {
 		Sources:              snapshot.sources,
 	}
 	applyOAuthConfigWarnings(&response, snapshot)
+	if snapshot.keyringErr != nil {
+		response.Warnings = mergeStrings(response.Warnings, []string{
+			"Could not read the refresh token from the system keyring: " + snapshot.keyringErr.Error() + ".",
+		})
+	}
 
 	switch {
 	case strings.TrimSpace(snapshot.resolved.APIKey) != "":

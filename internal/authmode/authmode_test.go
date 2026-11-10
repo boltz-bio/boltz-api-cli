@@ -67,7 +67,7 @@ func TestResolveRefreshesExpiringSession(t *testing.T) {
 	require.JSONEq(t, `{"refresh_token":"refresh-2"}`, string(body))
 }
 
-func TestResolveClearsSessionOnInvalidGrant(t *testing.T) {
+func TestResolveKeepsSessionOnInvalidGrant(t *testing.T) {
 	setUserDirs(t)
 	useFileOnlyKeyring(t)
 
@@ -107,11 +107,11 @@ func TestResolveClearsSessionOnInvalidGrant(t *testing.T) {
 
 	session, loadErr := authstore.LoadSession()
 	require.NoError(t, loadErr)
-	require.Nil(t, session)
+	require.NotNil(t, session)
+	require.Equal(t, "old-access", session.AccessToken)
 
 	_, statErr := os.Stat(credentialsPath(t))
-	require.Error(t, statErr)
-	require.True(t, os.IsNotExist(statErr))
+	require.NoError(t, statErr)
 }
 
 func TestResolvePersistsVerificationMetadataForLegacySessions(t *testing.T) {

@@ -53,7 +53,7 @@ func Resolve(ctx context.Context, resolved authconfig.Resolved) (Result, error) 
 		return Result{Mode: ModeOAuth, AccessToken: session.AccessToken, Session: session}, nil
 	}
 
-	refreshed, err := refreshSession(ctx, resolved)
+	refreshed, err := refreshSession(ctx, resolved, session)
 	if err != nil {
 		return Result{}, err
 	}
@@ -76,71 +76,63 @@ func SessionMatches(resolved authconfig.Resolved, session authstore.Session) boo
 	return sameScopes(session.Scopes, resolved.Scopes)
 }
 
-func refreshSession(ctx context.Context, resolved authconfig.Resolved) (*authstore.Session, error) {
+// refreshSession refreshes an expiring access token.
+//
+// The session lock exists only to serialize refresh-token rotation between
+// concurrent CLI processes: the server rotates refresh tokens, so two processes
+// refreshing with the same token would make the loser's token invalid. Keep the
+// lock as short as possible: OIDC discovery and the (potentially slow) keyring
+// read happen before it is taken; under the lock we only re-read session.json,
+// make the token request, and write the results.
+//
+// A failed refresh never deletes the stored session. Other processes may be
+// mid-run on it, and the failure may be transient (keyring unreachable, lost
+// rotation race, network). `auth login` overwrites it, `auth logout` clears it.
+func refreshSession(ctx context.Context, resolved authconfig.Resolved, observed *authstore.Session) (*authstore.Session, error) {
+	providerMetadata := resolveRefreshProvider(ctx, resolved, observed)
+	refreshToken, backend, tokenErr := authstore.LoadRefreshTokenWithPreferredBackend(observed.StorageBackend)
+
 	session, err := authstore.WithLock(ctx, func() (*authstore.Session, error) {
 		current, err := authstore.LoadSession()
 		if err != nil {
 			return nil, autherror.New("session_load_failed", "Failed to load OAuth session", err.Error())
 		}
-		if current == nil || !SessionMatches(resolved, *current) {
+		if current == nil {
+			return nil, MissingLoginError()
+		}
+		if !SessionMatches(resolved, *current) {
 			return nil, sessionMismatchError(resolved)
 		}
 		if usableAccessToken(current) {
+			// Another process refreshed while we waited for the lock.
 			return current, nil
 		}
-
-		providerMetadata := oauthclient.ProviderMetadata{
-			IssuerURL:        current.IssuerURL,
-			AuthorizationURL: coalesce(resolved.AuthorizationURL, current.AuthorizationURL),
-			TokenURL:         coalesce(resolved.TokenURL, current.TokenURL),
-			UserInfoURL:      coalesce(resolved.UserInfoURL, current.UserInfoURL),
-			RevocationURL:    coalesce(resolved.RevocationURL, current.RevocationURL),
-			JWKSURL:          strings.TrimSpace(current.JWKSURL),
-			Algorithms:       append([]string(nil), current.Algorithms...),
+		if !sameSessionVersion(current, observed) {
+			// session.json changed since we read the refresh token, so the token
+			// we hold may already be rotated. Read it again under the lock.
+			refreshToken, backend, tokenErr = authstore.LoadRefreshTokenWithPreferredBackend(current.StorageBackend)
 		}
-		if needsVerificationMetadata(providerMetadata) {
-			discovered, discoveryErr := oauthclient.ResolveProviderMetadata(ctx, oauthclient.Config{
-				IssuerURL:        current.IssuerURL,
-				AuthorizationURL: providerMetadata.AuthorizationURL,
-				TokenURL:         providerMetadata.TokenURL,
-				UserInfoURL:      providerMetadata.UserInfoURL,
-				RevocationURL:    providerMetadata.RevocationURL,
-			})
-			if discoveryErr == nil {
-				providerMetadata.AuthorizationURL = coalesce(providerMetadata.AuthorizationURL, discovered.AuthorizationURL)
-				providerMetadata.TokenURL = coalesce(providerMetadata.TokenURL, discovered.TokenURL)
-				providerMetadata.UserInfoURL = coalesce(providerMetadata.UserInfoURL, discovered.UserInfoURL)
-				providerMetadata.RevocationURL = coalesce(providerMetadata.RevocationURL, discovered.RevocationURL)
-				providerMetadata.JWKSURL = coalesce(providerMetadata.JWKSURL, discovered.JWKSURL)
-				if len(providerMetadata.Algorithms) == 0 {
-					providerMetadata.Algorithms = append([]string(nil), discovered.Algorithms...)
-				}
-			}
-		}
-
-		refreshToken, backend, err := authstore.LoadRefreshTokenWithPreferredBackend(current.StorageBackend)
-		if err != nil {
-			return nil, autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
+		if tokenErr != nil {
+			return nil, refreshTokenLoadError(tokenErr)
 		}
 		if strings.TrimSpace(refreshToken) == "" {
-			if clearErr := authstore.ClearAll(); clearErr != nil {
-				return nil, autherror.New("session_clear_failed", "Access token expired and the stored session could not be cleared", clearErr.Error())
-			}
-			return nil, autherror.New("reauth_required", "Stored OAuth session can no longer be refreshed", "Run `boltz-api auth login` again.")
+			return nil, ReauthError("Stored OAuth session has no refresh token")
 		}
 
-		tokens, err := oauthclient.Refresh(ctx, oauthclient.RefreshConfig{
-			Provider:     providerMetadata,
-			ClientID:     current.ClientID,
-			RefreshToken: refreshToken,
-			Resource:     current.Audience,
-		})
+		tokens, err := refreshWith(ctx, providerMetadata, current, refreshToken)
+		if err != nil && oauthclient.IsInvalidGrant(err) {
+			// The token may have been rotated by a process that wrote the new
+			// refresh token but not yet the session (or crashed in between).
+			// Re-read it and retry once if it changed.
+			latest, latestBackend, latestErr := authstore.LoadRefreshTokenWithPreferredBackend(current.StorageBackend)
+			if latestErr == nil && strings.TrimSpace(latest) != "" && latest != refreshToken {
+				refreshToken, backend = latest, latestBackend
+				tokens, err = refreshWith(ctx, providerMetadata, current, refreshToken)
+			}
+		}
 		if err != nil {
 			if oauthclient.IsInvalidGrant(err) {
-				if clearErr := authstore.ClearAll(); clearErr != nil {
-					return nil, autherror.New("session_clear_failed", "Stored OAuth session is invalid and could not be cleared", clearErr.Error())
-				}
-				return nil, autherror.New("reauth_required", "Stored OAuth session is no longer valid", "Run `boltz-api auth login` again.")
+				return nil, ReauthError("Stored OAuth session is no longer valid")
 			}
 			return nil, autherror.New("token_refresh_failed", "Failed to refresh OAuth access token", err.Error())
 		}
@@ -177,9 +169,100 @@ func refreshSession(ctx context.Context, resolved authconfig.Resolved) (*authsto
 		return current, nil
 	})
 	if err != nil {
+		var lockErr *authstore.LockTimeoutError
+		if errors.As(err, &lockErr) {
+			// The holder may have finished a refresh just before we gave up.
+			if latest, loadErr := authstore.LoadSession(); loadErr == nil && latest != nil && SessionMatches(resolved, *latest) && usableAccessToken(latest) {
+				return latest, nil
+			}
+			return nil, lockTimeoutError(lockErr)
+		}
 		return nil, err
 	}
 	return session, nil
+}
+
+func refreshWith(ctx context.Context, provider oauthclient.ProviderMetadata, session *authstore.Session, refreshToken string) (*oauthclient.TokenSet, error) {
+	return oauthclient.Refresh(ctx, oauthclient.RefreshConfig{
+		Provider:     provider,
+		ClientID:     session.ClientID,
+		RefreshToken: refreshToken,
+		Resource:     session.Audience,
+	})
+}
+
+// resolveRefreshProvider builds the provider metadata for a refresh, running
+// OIDC discovery for legacy sessions that lack verification metadata. It runs
+// outside the session lock because it is network I/O that does not depend on
+// the refresh token.
+func resolveRefreshProvider(ctx context.Context, resolved authconfig.Resolved, session *authstore.Session) oauthclient.ProviderMetadata {
+	providerMetadata := oauthclient.ProviderMetadata{
+		IssuerURL:        session.IssuerURL,
+		AuthorizationURL: coalesce(resolved.AuthorizationURL, session.AuthorizationURL),
+		TokenURL:         coalesce(resolved.TokenURL, session.TokenURL),
+		UserInfoURL:      coalesce(resolved.UserInfoURL, session.UserInfoURL),
+		RevocationURL:    coalesce(resolved.RevocationURL, session.RevocationURL),
+		JWKSURL:          strings.TrimSpace(session.JWKSURL),
+		Algorithms:       append([]string(nil), session.Algorithms...),
+	}
+	if !needsVerificationMetadata(providerMetadata) {
+		return providerMetadata
+	}
+	discovered, err := oauthclient.ResolveProviderMetadata(ctx, oauthclient.Config{
+		IssuerURL:        session.IssuerURL,
+		AuthorizationURL: providerMetadata.AuthorizationURL,
+		TokenURL:         providerMetadata.TokenURL,
+		UserInfoURL:      providerMetadata.UserInfoURL,
+		RevocationURL:    providerMetadata.RevocationURL,
+	})
+	if err != nil {
+		return providerMetadata
+	}
+	providerMetadata.AuthorizationURL = coalesce(providerMetadata.AuthorizationURL, discovered.AuthorizationURL)
+	providerMetadata.TokenURL = coalesce(providerMetadata.TokenURL, discovered.TokenURL)
+	providerMetadata.UserInfoURL = coalesce(providerMetadata.UserInfoURL, discovered.UserInfoURL)
+	providerMetadata.RevocationURL = coalesce(providerMetadata.RevocationURL, discovered.RevocationURL)
+	providerMetadata.JWKSURL = coalesce(providerMetadata.JWKSURL, discovered.JWKSURL)
+	if len(providerMetadata.Algorithms) == 0 {
+		providerMetadata.Algorithms = append([]string(nil), discovered.Algorithms...)
+	}
+	return providerMetadata
+}
+
+// sameSessionVersion reports whether session.json still holds what we read
+// before taking the lock. Every token rotation rewrites the session, so an
+// unchanged session means the refresh token read earlier is still current.
+func sameSessionVersion(a, b *authstore.Session) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.AccessToken == b.AccessToken &&
+		a.UpdatedAt.Equal(b.UpdatedAt) &&
+		a.StorageBackend == b.StorageBackend
+}
+
+func refreshTokenLoadError(err error) error {
+	if errors.Is(err, authstore.ErrKeyringUnavailable) || errors.Is(err, authstore.ErrKeyringTimeout) {
+		return autherror.NewWithHints(
+			"keyring_unavailable",
+			"Could not read the refresh token from the system keyring",
+			err.Error()+". The stored session was kept; retry once the keyring is reachable.",
+			"On headless hosts, set `"+authstore.DisableKeyringEnv+"=1` and run `boltz-api auth login` to store the refresh token in a 0600 file instead.",
+			"Set `--api-key` or `BOLTZ_API_KEY` to use API-key mode instead.",
+		)
+	}
+	return autherror.New("refresh_token_load_failed", "Failed to load refresh token", err.Error())
+}
+
+func lockTimeoutError(err *authstore.LockTimeoutError) error {
+	return autherror.NewWithHints(
+		"session_lock_timeout",
+		"Timed out waiting for another boltz-api process to finish refreshing the OAuth session",
+		err.Error()+".",
+		"If that process is stuck (often on a keyring prompt), stop it and retry.",
+		"Raise the wait with `"+authstore.LockTimeoutEnv+"` (for example `120s`).",
+		"Set `--api-key` or `BOLTZ_API_KEY` to use API-key mode, which never takes the lock.",
+	)
 }
 
 func needsVerificationMetadata(provider oauthclient.ProviderMetadata) bool {

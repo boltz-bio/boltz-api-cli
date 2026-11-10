@@ -209,7 +209,9 @@ func TestAuthLoginSubprocessInvalidBaseURLFailsBeforeOAuth(t *testing.T) {
 	require.Equal(t, 0, provider.DiscoveryRequests())
 }
 
-func TestAuthValidateSubprocessClearsInvalidGrantState(t *testing.T) {
+// A failed refresh must not delete local state: other CLI processes may be
+// mid-run on the session, and invalid_grant can come from a lost rotation race.
+func TestAuthValidateSubprocessKeepsSessionOnInvalidGrant(t *testing.T) {
 	binary := buildCLIBinary(t)
 	env := authProcessEnv(t)
 
@@ -250,11 +252,12 @@ func TestAuthValidateSubprocessClearsInvalidGrantState(t *testing.T) {
 
 	session, err := authstore.LoadSession()
 	require.NoError(t, err)
-	require.Nil(t, session)
+	require.NotNil(t, session)
+	require.Equal(t, "expired-access", session.AccessToken)
 
 	refreshToken, _, err := authstore.LoadRefreshToken()
 	require.NoError(t, err)
-	require.Empty(t, refreshToken)
+	require.Equal(t, "refresh-token", refreshToken)
 }
 
 type cliResult struct {
