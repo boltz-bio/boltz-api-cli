@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.44.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.43.0...v0.44.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** regenerate from reviewed API contract
+* **sdk:** regenerate from reviewed API contract
+
+### Features
+
+* **sdk:** regenerate from reviewed API contract ([921e26e](https://github.com/boltz-bio/boltz-api-cli/commit/921e26e54bb7737e77e5bdc3c03249ea16599a33))
+* **sdk:** regenerate from reviewed API contract ([32adc84](https://github.com/boltz-bio/boltz-api-cli/commit/32adc84d05a4cab69e416632c986d4a8d8d2589f))
+
+
+### Bug Fixes
+
+* align Go SDK pin with released generation ([b67a6bd](https://github.com/boltz-bio/boltz-api-cli/commit/b67a6bdef89b124f92e2edafac237972efc2c5ec))
+* align Go SDK pin with released generation ([a5f7451](https://github.com/boltz-bio/boltz-api-cli/commit/a5f74512fac74bedf5246d4637cca9f31ed37583))
+* **auth:** bound keyring and session-lock waits; don't wipe the session when the refresh token can't be read ([12596f8](https://github.com/boltz-bio/boltz-api-cli/commit/12596f82298c4dac83465814bd26027540285463))
+* **auth:** bound keyring and session-lock waits; don't wipe the session when the refresh token can't be read ([10da13b](https://github.com/boltz-bio/boltz-api-cli/commit/10da13b93e6fe968525719233ddd177789a5d2d6))
+
+
+### Chores
+
+* **sdk:** promote generated SDK ([1ec84e8](https://github.com/boltz-bio/boltz-api-cli/commit/1ec84e8a0d7172ab6d0b6f7e86ba7ae5c73b63db))
+* **sdk:** promote generated SDK ([68a1b11](https://github.com/boltz-bio/boltz-api-cli/commit/68a1b117b692b4117fea2df9c6f99777e10b8d9c))
+* **sdk:** promote generated SDK ([b2d9726](https://github.com/boltz-bio/boltz-api-cli/commit/b2d9726650edf6cd9bb511fdeb9eb63150488cb0))
+
 ## [0.43.0](https://github.com/boltz-bio/boltz-api-cli/compare/v0.42.0...v0.43.0) (2026-09-07)
 
 
